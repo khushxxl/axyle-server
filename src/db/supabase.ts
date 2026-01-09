@@ -25,11 +25,13 @@ const supabaseClient: SupabaseClient = createClient(
 );
 
 // Test connection on startup
-supabaseClient
-  .from("projects")
-  .select("id")
-  .limit(1)
-  .then(({ error }) => {
+(async () => {
+  try {
+    const { error } = await supabaseClient
+      .from("projects")
+      .select("id")
+      .limit(1);
+
     if (error) {
       console.error("❌ Supabase connection error:", error.message);
       console.error(
@@ -42,10 +44,11 @@ supabaseClient
     } else {
       console.log("✅ Supabase connected successfully");
     }
-  })
-  .catch((error) => {
-    console.error("❌ Failed to connect to Supabase:", error.message);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("❌ Failed to connect to Supabase:", errorMessage);
     process.exit(1);
-  });
+  }
+})();
 
 export const supabase = supabaseClient;
