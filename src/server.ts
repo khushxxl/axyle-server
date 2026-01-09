@@ -68,12 +68,10 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server
-const PORT = config.server.port;
+const PORT = Number(process.env.PORT) || 3000;
 
-app.listen(PORT, () => {
-  console.log(`🚀 Analytics API server running on port ${PORT}`);
-  console.log(`📊 Environment: ${config.server.nodeEnv}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
 
 // Graceful shutdown
