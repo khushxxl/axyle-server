@@ -30,39 +30,34 @@ router.get(
         return res.status(404).json({ error: 'App not found' });
       }
 
-      // Get active API key
+      // Get active API key (we never return the raw key — it's hashed and shown only at creation)
       const apiKeys = await storage.listApiKeys(appId);
       const activeApiKey = apiKeys.find(k => k.is_active);
-      
+
       if (!activeApiKey) {
         return res.status(404).json({ error: 'No active API key found' });
       }
 
-      // Get the actual key data by ID
       const apiKeyData = await storage.getApiKeyById(activeApiKey.id);
-      if (!apiKeyData || !apiKeyData.key) {
+      if (!apiKeyData) {
         return res.status(404).json({ error: 'No active API key found' });
       }
 
-      // Get user ID from app_users if exists
       const appUserData = await storage.getAppUser(appId, userId || '');
 
-      const app = {
-        ...projectData,
-        api_key: apiKeyData.key,
-        user_id: appUserData?.user_id || undefined,
-      };
+      const hasLegacyKey = !!apiKeyData.key;
 
       res.json({
-        apiKey: app.api_key,
-        userId: app.user_id || undefined,
-        environment: (app.environment || 'prod') as 'dev' | 'prod',
-        baseUrl: app.base_url || 'https://api.expo-analytics.com',
-        debug: app.debug || false,
+        ...(hasLegacyKey && { apiKey: apiKeyData.key }),
+        apiKeyConfigured: true,
+        userId: appUserData?.user_id || undefined,
+        environment: (projectData.environment || 'prod') as 'dev' | 'prod',
+        baseUrl: projectData.base_url || 'https://api.expo-analytics.com',
+        debug: projectData.debug || false,
         settings: {
-          maxQueueSize: app.max_queue_size,
-          flushInterval: app.flush_interval,
-          sessionTimeout: app.session_timeout,
+          maxQueueSize: projectData.max_queue_size,
+          flushInterval: projectData.flush_interval,
+          sessionTimeout: projectData.session_timeout,
         },
       });
     } catch (error) {

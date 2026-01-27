@@ -12,6 +12,7 @@ import {
   PlatformUser,
 } from "./storage";
 import { AnalyticsEvent } from "../types";
+import { hashApiKey } from "../utils/hash";
 
 export class SupabaseStorage implements StorageAdapter {
   constructor(private supabase: SupabaseClient) {}
@@ -60,13 +61,15 @@ export class SupabaseStorage implements StorageAdapter {
     if (error) throw error;
   }
 
-  // API Keys
+  // API Keys — we store only the hash. Plain key is shown once at creation and never again.
   async createApiKey(projectId: string, key: string): Promise<any> {
+    const keyHash = hashApiKey(key);
     const { data, error } = await this.supabase
       .from("api_keys")
       .insert({
         project_id: projectId,
-        key,
+        key: null, // never store plain key
+        key_hash: keyHash,
         is_active: true,
       })
       .select()
@@ -76,7 +79,8 @@ export class SupabaseStorage implements StorageAdapter {
     return data;
   }
 
-  async getApiKey(key: string): Promise<any | null> {
+  async getApiKey(plainKey: string): Promise<any | null> {
+    const keyHash = hashApiKey(plainKey);
     const { data, error } = await this.supabase
       .from("api_keys")
       .select(
@@ -84,22 +88,23 @@ export class SupabaseStorage implements StorageAdapter {
         id,
         project_id,
         key,
+        key_hash,
         is_active,
         projects!inner(id)
       `
       )
-      .eq("key", key)
+      .or(`key_hash.eq.${keyHash},key.eq.${plainKey}`)
       .eq("is_active", true)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== "PGRST116") throw error;
+    if (error) throw error;
     return data || null;
   }
 
   async getApiKeyById(id: string): Promise<any | null> {
     const { data, error } = await this.supabase
       .from("api_keys")
-      .select("id, project_id, key, is_active")
+      .select("id, project_id, key, key_hash, is_active")
       .eq("id", id)
       .eq("is_active", true)
       .single();

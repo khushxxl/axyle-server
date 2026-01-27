@@ -148,23 +148,21 @@ router.post("/:projectId/api-keys", async (req: Request, res: Response) => {
       });
     }
 
-    // Generate API key (UUID)
+    // Generate API key (UUID). Storage saves only the hash; we return the plain key here once.
     const apiKey = randomUUID();
-
-    // Create API key
     const apiKeyData = await storage.createApiKey(projectId, apiKey);
 
     res.status(201).json({
       success: true,
       apiKey: {
         id: apiKeyData.id,
-        key: apiKeyData.key,
+        key: apiKey, // Plain key shown only in this response — never stored or returned again
         projectId: apiKeyData.project_id,
         isActive: apiKeyData.is_active,
         createdAt: apiKeyData.created_at,
       },
-      // Important: Show the key only once
-      message: "Save this API key securely. It will not be shown again.",
+      message:
+        "Save this API key securely. It will not be shown again. You can only regenerate it.",
     });
   } catch (error) {
     console.error("Error creating API key:", error);
@@ -239,7 +237,7 @@ router.delete(
         error: "Internal server error",
       });
     }
-  }
+  },
 );
 
 /**

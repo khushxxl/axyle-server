@@ -26,7 +26,7 @@ export interface EventContext {
     manufacturer: string | null;
     model: string | null;
     name: string | null;
-    type: 'PHONE' | 'TABLET' | 'DESKTOP' | 'TV' | 'UNKNOWN';
+    type: "PHONE" | "TABLET" | "DESKTOP" | "TV" | "UNKNOWN";
     brand: string | null;
   };
   os: {
@@ -44,7 +44,7 @@ export interface EventContext {
     carrier: string | null;
     wifi: boolean;
   };
-  environment: 'dev' | 'prod';
+  environment: "dev" | "prod";
 }
 
 export interface EventsRequest {
@@ -60,9 +60,12 @@ export interface EventsResponse {
 }
 
 export interface SDKConfigResponse {
-  apiKey: string;
+  /** Present only for legacy keys; hashed keys cannot be retrieved. Use the key you saved at creation. */
+  apiKey?: string;
+  /** True when an API key exists but is not returned (hashed). Client must use the key saved at creation. */
+  apiKeyConfigured?: boolean;
   userId?: string;
-  environment: 'dev' | 'prod';
+  environment: "dev" | "prod";
   baseUrl: string;
   debug: boolean;
   settings: {
@@ -97,4 +100,3 @@ export interface ApiKey {
   createdAt: Date;
   lastUsedAt: Date | null;
 }
-

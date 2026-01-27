@@ -4,7 +4,7 @@
   "description": "Backend API server for Expo Analytics SDK",
   "main": "dist/server.js",
   "scripts": {
-    "start": "node dist/server.js",
+    "start": "nodemon src/server.ts",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "migrate": "node dist/migrations/run.js",
@@ -22,23 +22,24 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "express-rate-limit": "^7.1.5",
     "@supabase/supabase-js": "^2.39.0",
+    "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "uuid": "^9.0.1",
-    "openai": "^4.20.0"
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "nodemon": "^3.1.11",
+    "openai": "^4.20.0",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
     "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
     "@types/node": "^20.10.6",
     "@types/uuid": "^9.0.7",
-    "tsx": "^4.7.0",
-    "typescript": "^5.3.3",
-    "eslint": "^8.56.0",
     "@typescript-eslint/eslint-plugin": "^6.17.0",
-    "@typescript-eslint/parser": "^6.17.0"
+    "@typescript-eslint/parser": "^6.17.0",
+    "eslint": "^8.56.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
   }
 }

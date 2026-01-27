@@ -25,7 +25,7 @@ app.use(
   cors({
     origin: config.server.corsOrigin,
     credentials: true,
-  })
+  }),
 );
 
 app.use(express.json({ limit: "1mb" }));
@@ -39,7 +39,7 @@ app.use(
   (req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
     next();
-  }
+  },
 );
 
 // Health check
@@ -68,7 +68,7 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 8000;
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
