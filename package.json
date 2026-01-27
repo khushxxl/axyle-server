@@ -4,7 +4,7 @@
   "description": "Backend API server for Expo Analytics SDK",
   "main": "dist/server.js",
   "scripts": {
-    "start": "nodemon src/server.ts",
+    "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "migrate": "node dist/migrations/run.js",
