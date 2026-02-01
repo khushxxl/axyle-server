@@ -23,9 +23,14 @@ router.get("/events", async (req: Request, res: Response) => {
       endDate,
     } = req.query;
 
+    const parsedLimit = parseInt(limit as string, 10);
+    const parsedOffset = parseInt(offset as string, 10);
+    
+    console.log(`Fetching all events: limit=${parsedLimit}, offset=${parsedOffset}, projectId=${projectId}`);
+
     const events = await storage.getAllEvents({
-      limit: parseInt(limit as string, 10),
-      offset: parseInt(offset as string, 10),
+      limit: parsedLimit,
+      offset: parsedOffset,
       eventName: eventName as string | undefined,
       projectId: projectId as string | undefined,
       startDate: startDate as string | undefined,
@@ -183,6 +188,11 @@ router.get(
         endDate,
       } = req.query;
 
+      const parsedLimit = parseInt(limit as string, 10);
+      const parsedOffset = parseInt(offset as string, 10);
+      
+      console.log(`Fetching project events: limit=${parsedLimit}, offset=${parsedOffset}`);
+
       // Verify project exists
       const project = await storage.getProject(projectId);
       if (!project) {
@@ -193,8 +203,8 @@ router.get(
       }
 
       const events = await storage.getEvents(projectId, {
-        limit: parseInt(limit as string, 10),
-        offset: parseInt(offset as string, 10),
+        limit: parsedLimit,
+        offset: parsedOffset,
         eventName: eventName as string | undefined,
         startDate: startDate as string | undefined,
         endDate: endDate as string | undefined,

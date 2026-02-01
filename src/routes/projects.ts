@@ -4,7 +4,8 @@
 
 import { Router, Request, Response } from "express";
 import { storage } from "../db";
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes } from "crypto";
+import { apiKeyCreationRateLimiter } from "../middleware/rateLimiting";
 
 const router = Router();
 
@@ -133,7 +134,10 @@ router.get("/:projectId", async (req: Request, res: Response) => {
  * POST /api/v1/projects/:projectId/api-keys
  * Create a new API key for a project
  */
-router.post("/:projectId/api-keys", async (req: Request, res: Response) => {
+router.post(
+  "/:projectId/api-keys",
+  apiKeyCreationRateLimiter,
+  async (req: Request, res: Response) => {
   try {
     const { projectId } = req.params;
     const { name } = req.body;
@@ -148,8 +152,10 @@ router.post("/:projectId/api-keys", async (req: Request, res: Response) => {
       });
     }
 
-    // Generate API key (UUID). Storage saves only the hash; we return the plain key here once.
-    const apiKey = randomUUID();
+    // Generate API key (cryptographically random). Storage saves only the hash; we return the plain key here once.
+    // Using 32 random bytes encoded as base64url (URL-safe base64 without padding)
+    // This gives us 256 bits of entropy, making brute force attacks infeasible
+    const apiKey = randomBytes(32).toString("base64url");
     const apiKeyData = await storage.createApiKey(projectId, apiKey);
 
     res.status(201).json({
@@ -171,7 +177,8 @@ router.post("/:projectId/api-keys", async (req: Request, res: Response) => {
       error: "Internal server error",
     });
   }
-});
+  }
+);
 
 /**
  * GET /api/v1/projects/:projectId/api-keys
@@ -249,6 +256,11 @@ router.get("/:projectId/users", async (req: Request, res: Response) => {
     const { projectId } = req.params;
     const { limit = "100", offset = "0" } = req.query;
 
+    const parsedLimit = parseInt(limit as string, 10);
+    const parsedOffset = parseInt(offset as string, 10);
+    
+    console.log(`Fetching project users: limit=${parsedLimit}, offset=${parsedOffset}`);
+
     // Verify project exists
     const project = await storage.getProject(projectId);
 
@@ -260,8 +272,8 @@ router.get("/:projectId/users", async (req: Request, res: Response) => {
     }
 
     const users = await storage.getProjectUsers(projectId, {
-      limit: parseInt(limit as string, 10),
-      offset: parseInt(offset as string, 10),
+      limit: parsedLimit,
+      offset: parsedOffset,
     });
 
     res.json({

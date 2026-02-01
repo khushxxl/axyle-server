@@ -41,15 +41,51 @@ export class SupabaseStorage implements StorageAdapter {
   }
 
   async listProjects(userId?: string): Promise<any[]> {
-    let query = this.supabase.from("projects").select("*");
-    if (userId) {
-      query = query.eq("user_id", userId);
+    if (!userId) {
+      // If no userId, return all projects (admin view)
+      const { data, error } = await this.supabase
+        .from("projects")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
     }
-    const { data, error } = await query.order("created_at", {
-      ascending: false,
-    });
+
+    // Get projects where user is a team member
+    const { data: teamMemberships, error: teamError } = await this.supabase
+      .from("project_team_members")
+      .select("project_id, role")
+      .eq("user_id", userId);
+
+    if (teamError) throw teamError;
+
+    if (!teamMemberships || teamMemberships.length === 0) {
+      return [];
+    }
+
+    const projectIds = teamMemberships.map((m) => m.project_id);
+
+    // Get project details
+    const { data, error } = await this.supabase
+      .from("projects")
+      .select("*")
+      .in("id", projectIds)
+      .order("created_at", { ascending: false });
+
     if (error) throw error;
-    return data || [];
+
+    // Enrich with role information
+    const enrichedProjects = (data || []).map((project) => {
+      const membership = teamMemberships.find(
+        (m) => m.project_id === project.id
+      );
+      return {
+        ...project,
+        role: membership?.role || "member",
+      };
+    });
+
+    return enrichedProjects;
   }
 
   async deleteProject(id: string): Promise<void> {
@@ -265,9 +301,11 @@ export class SupabaseStorage implements StorageAdapter {
     if (filters?.eventName) {
       query = query.eq("event_name", filters.eventName);
     }
-    if (filters?.limit) {
-      query = query.limit(filters.limit);
-    }
+
+    // Apply limit and offset using range
+    const limit = filters?.limit || 100;
+    const offset = filters?.offset || 0;
+    query = query.range(offset, offset + limit - 1);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -275,6 +313,35 @@ export class SupabaseStorage implements StorageAdapter {
   }
 
   async getEventStats(projectId: string, filters?: any): Promise<any> {
+    // Use count-only RPC so we never hit PostgREST default row limit (1000)
+    const startDate = filters?.startDate
+      ? new Date(filters.startDate + "T00:00:00").toISOString()
+      : null;
+    const endDate = filters?.endDate
+      ? new Date(filters.endDate + "T23:59:59.999").toISOString()
+      : null;
+
+    const { data: rpcData, error: rpcError } = await this.supabase.rpc(
+      "get_project_event_stats",
+      {
+        p_project_id: projectId,
+        start_date: startDate,
+        end_date: endDate,
+      }
+    );
+
+    if (!rpcError && rpcData) {
+      return rpcData;
+    }
+
+    // Fallback: fetch rows (capped by Supabase default 1000 - run migration 020 to fix)
+    if (rpcError) {
+      console.warn(
+        "get_project_event_stats not available, using fallback (count may be capped at 1000):",
+        rpcError.message
+      );
+    }
+
     let baseQuery = this.supabase
       .from("events")
       .select("*")
@@ -313,6 +380,136 @@ export class SupabaseStorage implements StorageAdapter {
       .sort((a, b) => b.count - a.count)
       .slice(0, 20);
 
+    // Generate eventsOverTime with appropriate granularity based on date range
+    // - Today/Yesterday (1-2 days): Hourly (00:00, 01:00, ...)
+    // - 7 days (8 days inclusive): Daily (Mon, Tue, Wed, ...)
+    // - 30 days: Weekly (Week 1, Week 2, ...)
+    // - 90 days: Weekly (Week 1, Week 2, ...)
+    // - All time (no filters): Monthly (Jan, Feb, ...)
+
+    const now = new Date();
+    let dateRangeDays = 0; // 0 means "all time" (no date filters)
+
+    if (filters?.startDate && filters?.endDate) {
+      const start = new Date(filters.startDate);
+      const end = new Date(filters.endDate);
+      dateRangeDays =
+        Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) +
+        1;
+    } else if (filters?.startDate) {
+      const start = new Date(filters.startDate);
+      dateRangeDays =
+        Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) +
+        1;
+    }
+
+    // Determine granularity
+    // Note: "7 days" selection gives 8 days inclusive (7 days ago through today)
+    type Granularity = "hourly" | "daily" | "weekly" | "monthly";
+    let granularity: Granularity;
+
+    if (dateRangeDays === 0) {
+      // All time - use monthly
+      granularity = "monthly";
+    } else if (dateRangeDays <= 2) {
+      // Today or Yesterday - use hourly
+      granularity = "hourly";
+    } else if (dateRangeDays <= 8) {
+      // 7 days (8 days inclusive) - use daily (Mon, Tue, Wed...)
+      granularity = "daily";
+    } else if (dateRangeDays <= 91) {
+      // 30-90 days (up to 91 days inclusive) - use weekly
+      granularity = "weekly";
+    } else {
+      // More than 90 days - use monthly
+      granularity = "monthly";
+    }
+
+    const eventsByTime: Record<string, number> = {};
+    const weekStartDates: Record<string, Date> = {}; // Track actual start dates for sorting
+
+    allEvents?.forEach((event) => {
+      const eventDate = new Date(event.created_at);
+      let timeKey: string;
+
+      switch (granularity) {
+        case "hourly":
+          // Format: "00:00", "01:00", etc.
+          timeKey = `${String(eventDate.getHours()).padStart(2, "0")}:00`;
+          break;
+        case "daily":
+          // Format: "Mon", "Tue", etc.
+          timeKey = eventDate.toLocaleDateString("en-US", { weekday: "short" });
+          break;
+        case "weekly":
+          // Format: "Week 1", "Week 2", etc. (based on start date)
+          const startDate = filters?.startDate
+            ? new Date(filters.startDate)
+            : new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          const daysSinceStart = Math.floor(
+            (eventDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          const weekNumber = Math.floor(daysSinceStart / 7) + 1;
+          timeKey = `Week ${weekNumber}`;
+          if (!weekStartDates[timeKey]) {
+            weekStartDates[timeKey] = new Date(
+              startDate.getTime() + (weekNumber - 1) * 7 * 24 * 60 * 60 * 1000
+            );
+          }
+          break;
+        case "monthly":
+          // Format: "Jan", "Feb", etc.
+          timeKey = eventDate.toLocaleDateString("en-US", { month: "short" });
+          break;
+      }
+
+      eventsByTime[timeKey] = (eventsByTime[timeKey] || 0) + 1;
+    });
+
+    // Sort by time based on granularity
+    const eventsOverTime = Object.entries(eventsByTime)
+      .sort(([a], [b]) => {
+        switch (granularity) {
+          case "hourly":
+            return a.localeCompare(b);
+          case "daily":
+            const dayOrder: Record<string, number> = {
+              Mon: 1,
+              Tue: 2,
+              Wed: 3,
+              Thu: 4,
+              Fri: 5,
+              Sat: 6,
+              Sun: 7,
+            };
+            return (dayOrder[a] || 0) - (dayOrder[b] || 0);
+          case "weekly":
+            // Sort by week number
+            const weekA = parseInt(a.replace("Week ", ""));
+            const weekB = parseInt(b.replace("Week ", ""));
+            return weekA - weekB;
+          case "monthly":
+            const monthOrder: Record<string, number> = {
+              Jan: 1,
+              Feb: 2,
+              Mar: 3,
+              Apr: 4,
+              May: 5,
+              Jun: 6,
+              Jul: 7,
+              Aug: 8,
+              Sep: 9,
+              Oct: 10,
+              Nov: 11,
+              Dec: 12,
+            };
+            return (monthOrder[a] || 0) - (monthOrder[b] || 0);
+          default:
+            return 0;
+        }
+      })
+      .map(([hour, count]) => ({ hour, count }));
+
     return {
       overview: {
         total_events: totalEvents,
@@ -321,6 +518,7 @@ export class SupabaseStorage implements StorageAdapter {
         unique_devices: uniqueDevices,
       },
       topEvents,
+      eventsOverTime,
     };
   }
 
@@ -364,20 +562,32 @@ export class SupabaseStorage implements StorageAdapter {
     projectIds?: string[],
     filters?: { startDate?: string; endDate?: string }
   ): Promise<any> {
-    // If date filters are provided, use fallback method with date filtering
-    // Otherwise use the database function for efficiency
-    if (filters?.startDate || filters?.endDate) {
-      return this.getGlobalEventStatsFallback(projectIds, filters);
-    }
+    // Use database functions for efficient count-only aggregation (no full row fetch)
+    const rpcName =
+      filters?.startDate || filters?.endDate
+        ? "get_global_event_stats_filtered"
+        : "get_global_event_stats";
 
-    // Use database function for efficient aggregation
-    // This is much faster than fetching all events and processing in JavaScript
-    const { data, error } = await this.supabase.rpc("get_global_event_stats", {
-      project_ids: projectIds && projectIds.length > 0 ? projectIds : null,
-    });
+    const rpcParams: Record<string, unknown> =
+      rpcName === "get_global_event_stats_filtered"
+        ? {
+            project_ids:
+              projectIds && projectIds.length > 0 ? projectIds : null,
+            start_date: filters?.startDate
+              ? new Date(filters.startDate + "T00:00:00").toISOString()
+              : null,
+            end_date: filters?.endDate
+              ? new Date(filters.endDate + "T23:59:59.999").toISOString()
+              : null,
+          }
+        : {
+            project_ids:
+              projectIds && projectIds.length > 0 ? projectIds : null,
+          };
+
+    const { data, error } = await this.supabase.rpc(rpcName, rpcParams);
 
     if (error) {
-      // Fallback to manual calculation if function doesn't exist yet
       console.warn(
         "Database function not available, using fallback:",
         error.message
@@ -403,7 +613,7 @@ export class SupabaseStorage implements StorageAdapter {
     projectIds?: string[],
     filters?: { startDate?: string; endDate?: string }
   ): Promise<any> {
-    // Use optimized query with only needed fields
+    // Get ALL events in a single query
     let query = this.supabase
       .from("events")
       .select("event_name, user_id, session_id, anonymous_id, created_at");
@@ -412,28 +622,22 @@ export class SupabaseStorage implements StorageAdapter {
       query = query.in("project_id", projectIds);
     }
 
-    // Apply date filters
-    if (filters?.startDate) {
-      query = query.gte("created_at", filters.startDate);
-    }
-    if (filters?.endDate) {
-      query = query.lte("created_at", filters.endDate);
-    }
-
-    const { data: events, error } = await query;
+    const { data: allEvents, error } = await query;
     if (error) throw error;
 
-    const eventList = events || [];
-    const totalEvents = eventList.length;
-    const uniqueUsers = new Set(
-      eventList.filter((e) => e.user_id).map((e) => e.user_id)
-    ).size;
-    const uniqueSessions = new Set(eventList.map((e) => e.session_id)).size;
-    const uniqueDevices = new Set(eventList.map((e) => e.anonymous_id)).size;
+    const allEventList = allEvents || [];
 
-    // Event counts by name
+    // Calculate overview stats from ALL events (not filtered)
+    const totalEvents = allEventList.length;
+    const uniqueUsers = new Set(
+      allEventList.filter((e) => e.user_id).map((e) => e.user_id)
+    ).size;
+    const uniqueSessions = new Set(allEventList.map((e) => e.session_id)).size;
+    const uniqueDevices = new Set(allEventList.map((e) => e.anonymous_id)).size;
+
+    // Event counts by name (from all events)
     const eventCounts: Record<string, number> = {};
-    eventList.forEach((event) => {
+    allEventList.forEach((event) => {
       const eventName = event.event_name;
       if (eventName) {
         eventCounts[eventName] = (eventCounts[eventName] || 0) + 1;
@@ -445,21 +649,154 @@ export class SupabaseStorage implements StorageAdapter {
       .sort((a, b) => b.count - a.count)
       .slice(0, 20);
 
-    // Generate eventsOverTime if date range is provided
-    let eventsOverTime: any[] = [];
-    if (filters?.startDate || filters?.endDate) {
-      const eventsByDay: Record<string, number> = {};
-      eventList.forEach((event) => {
-        const day = new Date(event.created_at).toLocaleDateString("en-US", {
-          weekday: "short",
-        });
-        eventsByDay[day] = (eventsByDay[day] || 0) + 1;
-      });
-      eventsOverTime = Object.entries(eventsByDay).map(([hour, count]) => ({
-        hour,
-        count,
-      }));
+    // Filter events in memory for eventsOverTime (to avoid second query)
+    const eventList =
+      filters?.startDate || filters?.endDate
+        ? allEventList.filter((event) => {
+            const eventDate = new Date(event.created_at);
+            // Parse dates in local timezone, not UTC
+            const startDate = filters.startDate
+              ? new Date(filters.startDate + "T00:00:00")
+              : null;
+            const endDate = filters.endDate
+              ? new Date(filters.endDate + "T23:59:59.999")
+              : null;
+
+            if (startDate && endDate) {
+              return eventDate >= startDate && eventDate <= endDate;
+            } else if (startDate) {
+              return eventDate >= startDate;
+            } else if (endDate) {
+              return eventDate <= endDate;
+            }
+            return true;
+          })
+        : allEventList;
+
+    // Generate eventsOverTime with appropriate granularity based on date range
+    // - Today/Yesterday (1-2 days): Hourly (00:00, 01:00, ...)
+    // - 7 days: Daily (Mon, Tue, Wed, ...)
+    // - 30 days: Weekly (Week 1, Week 2, ...)
+    // - 90 days: Weekly (Week 1, Week 2, ...)
+    // - All time (no filters): Monthly (Jan, Feb, ...)
+
+    const now = new Date();
+    let dateRangeDays = 0; // 0 means "all time" (no date filters)
+
+    if (filters?.startDate && filters?.endDate) {
+      const start = new Date(filters.startDate);
+      const end = new Date(filters.endDate);
+      dateRangeDays =
+        Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) +
+        1;
+    } else if (filters?.startDate) {
+      const start = new Date(filters.startDate);
+      dateRangeDays =
+        Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) +
+        1;
     }
+
+    // Determine granularity
+    // Note: "7 days" selection gives 8 days inclusive (7 days ago through today)
+    type Granularity = "hourly" | "daily" | "weekly" | "monthly";
+    let granularity: Granularity;
+
+    if (dateRangeDays === 0) {
+      // All time - use monthly
+      granularity = "monthly";
+    } else if (dateRangeDays <= 2) {
+      // Today or Yesterday - use hourly
+      granularity = "hourly";
+    } else if (dateRangeDays <= 8) {
+      // 7 days (8 days inclusive) - use daily (Mon, Tue, Wed...)
+      granularity = "daily";
+    } else if (dateRangeDays <= 91) {
+      // 30-90 days (up to 91 days inclusive) - use weekly
+      granularity = "weekly";
+    } else {
+      // More than 90 days - use monthly
+      granularity = "monthly";
+    }
+
+    const eventsByTime: Record<string, number> = {};
+
+    // eventList is already filtered by the query above, so use it directly
+    eventList.forEach((event) => {
+      const eventDate = new Date(event.created_at);
+      let timeKey: string;
+
+      switch (granularity) {
+        case "hourly":
+          // Format: "00:00", "01:00", etc.
+          timeKey = `${String(eventDate.getHours()).padStart(2, "0")}:00`;
+          break;
+        case "daily":
+          // Format: "Mon", "Tue", etc.
+          timeKey = eventDate.toLocaleDateString("en-US", { weekday: "short" });
+          break;
+        case "weekly":
+          // Format: "Week 1", "Week 2", etc. (based on start date)
+          const startDate = filters?.startDate
+            ? new Date(filters.startDate)
+            : new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          const daysSinceStart = Math.floor(
+            (eventDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          const weekNumber = Math.floor(daysSinceStart / 7) + 1;
+          timeKey = `Week ${weekNumber}`;
+          break;
+        case "monthly":
+          // Format: "Jan", "Feb", etc.
+          timeKey = eventDate.toLocaleDateString("en-US", { month: "short" });
+          break;
+      }
+
+      eventsByTime[timeKey] = (eventsByTime[timeKey] || 0) + 1;
+    });
+
+    // Sort by time based on granularity
+    const eventsOverTime = Object.entries(eventsByTime)
+      .sort(([a], [b]) => {
+        switch (granularity) {
+          case "hourly":
+            return a.localeCompare(b);
+          case "daily":
+            const dayOrder: Record<string, number> = {
+              Mon: 1,
+              Tue: 2,
+              Wed: 3,
+              Thu: 4,
+              Fri: 5,
+              Sat: 6,
+              Sun: 7,
+            };
+            return (dayOrder[a] || 0) - (dayOrder[b] || 0);
+          case "weekly":
+            // Sort by week number
+            const weekA = parseInt(a.replace("Week ", ""));
+            const weekB = parseInt(b.replace("Week ", ""));
+            return weekA - weekB;
+          case "monthly":
+            const monthOrder: Record<string, number> = {
+              Jan: 1,
+              Feb: 2,
+              Mar: 3,
+              Apr: 4,
+              May: 5,
+              Jun: 6,
+              Jul: 7,
+              Aug: 8,
+              Sep: 9,
+              Oct: 10,
+              Nov: 11,
+              Dec: 12,
+            };
+            return (monthOrder[a] || 0) - (monthOrder[b] || 0);
+          default:
+            return 0;
+        }
+      })
+      .map(([hour, count]) => ({ hour, count }));
 
     return {
       overview: {
@@ -469,7 +806,7 @@ export class SupabaseStorage implements StorageAdapter {
         unique_devices: uniqueDevices,
       },
       topEvents,
-      ...(eventsOverTime.length > 0 && { eventsOverTime }),
+      eventsOverTime,
     };
   }
 
@@ -843,7 +1180,7 @@ export class SupabaseStorage implements StorageAdapter {
         name: data.name,
         steps: data.steps,
         chart_type: data.chart_type,
-        pinned: data.pinned || false,
+        pinned: data.pinned !== undefined ? data.pinned : true,
       })
       .select()
       .single();
@@ -1807,6 +2144,7 @@ export class SupabaseStorage implements StorageAdapter {
   async getOrCreateUser(userId: string): Promise<PlatformUser> {
     // Try to get existing user
     let user: PlatformUser | null = await this.getUser(userId);
+    let isNewUser = false;
 
     // If user doesn't exist, create it (fallback if trigger didn't fire)
     if (!user) {
@@ -1818,15 +2156,84 @@ export class SupabaseStorage implements StorageAdapter {
           onboarding_completed: false,
           subscription_status: "free",
           subscription_plan: "free",
+          welcome_email_sent: false,
         })
         .select()
         .single();
 
       if (error) throw error;
       user = data as PlatformUser;
+      isNewUser = true;
+    }
+
+    // Check if welcome email needs to be sent (for both new and existing users)
+    // Use atomic update to prevent duplicate sends
+    if (!user.welcome_email_sent) {
+      // Try to atomically mark as "sending" to prevent race conditions
+      const { data: updateResult } = await this.supabase
+        .from("users")
+        .update({ welcome_email_sent: true })
+        .eq("id", userId)
+        .eq("welcome_email_sent", false)
+        .select()
+        .single();
+
+      // Only send email if we successfully updated (no race condition)
+      if (updateResult) {
+        this.sendWelcomeEmailAsync(userId).catch((err) => {
+          console.error("Failed to send welcome email:", err);
+          // Revert the flag if email fails
+          this.supabase
+            .from("users")
+            .update({ welcome_email_sent: false })
+            .eq("id", userId)
+            .then(() => {});
+        });
+      }
     }
 
     return user;
+  }
+
+  private async sendWelcomeEmailAsync(userId: string): Promise<void> {
+    try {
+      // Import email service dynamically to avoid circular dependencies
+      const { emailService } = await import("../services/emailService");
+
+      // Get user's email from auth.users
+      const { data: authUser, error } =
+        await this.supabase.auth.admin.getUserById(userId);
+
+      if (error || !authUser?.user?.email) {
+        console.warn(`Unable to get email for user ${userId}`);
+        throw new Error("Unable to get user email");
+      }
+
+      // Extract name from user metadata if available
+      const name =
+        authUser.user.user_metadata?.full_name ||
+        authUser.user.user_metadata?.name ||
+        undefined;
+
+      // Send the welcome email
+      await emailService.sendWelcomeEmail({
+        email: authUser.user.email,
+        name,
+      });
+
+      // Update timestamp after successful send
+      await this.supabase
+        .from("users")
+        .update({
+          welcome_email_sent_at: new Date().toISOString(),
+        })
+        .eq("id", userId);
+
+      console.log(`Welcome email sent successfully to ${authUser.user.email}`);
+    } catch (error) {
+      console.error("Error in sendWelcomeEmailAsync:", error);
+      throw error;
+    }
   }
 
   async updateUser(
@@ -1862,5 +2269,297 @@ export class SupabaseStorage implements StorageAdapter {
 
     if (error) throw error;
     return updatedUser;
+  }
+
+  async getUserByEmail(email: string): Promise<PlatformUser | null> {
+    // Get user from auth.users by email
+    const { data: authUsers, error: authError } =
+      await this.supabase.auth.admin.listUsers();
+
+    if (authError) throw authError;
+
+    const authUser = authUsers.users.find((u) => u.email === email);
+    if (!authUser) return null;
+
+    // Get platform user data
+    return this.getUser(authUser.id);
+  }
+
+  // Team Members
+  async getProjectTeamMembers(
+    projectId: string
+  ): Promise<import("./storage").TeamMember[]> {
+    const { data, error } = await this.supabase
+      .from("project_team_members")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: true });
+
+    if (error) throw error;
+
+    // Enrich with user data
+    const enrichedMembers = await Promise.all(
+      (data || []).map(async (member) => {
+        const { data: authUser } = await this.supabase.auth.admin.getUserById(
+          member.user_id
+        );
+
+        return {
+          ...member,
+          user: authUser?.user
+            ? {
+                id: authUser.user.id,
+                email: authUser.user.email,
+                name:
+                  authUser.user.user_metadata?.full_name ||
+                  authUser.user.user_metadata?.name ||
+                  authUser.user.email?.split("@")[0],
+                avatar_url:
+                  authUser.user.user_metadata?.avatar_url ||
+                  authUser.user.user_metadata?.picture,
+              }
+            : undefined,
+        };
+      })
+    );
+
+    return enrichedMembers;
+  }
+
+  async getTeamMember(
+    memberId: string
+  ): Promise<import("./storage").TeamMember | null> {
+    const { data, error } = await this.supabase
+      .from("project_team_members")
+      .select("*")
+      .eq("id", memberId)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data || null;
+  }
+
+  async addTeamMember(data: {
+    projectId: string;
+    userId: string;
+    invitedBy: string;
+  }): Promise<import("./storage").TeamMember> {
+    const { data: member, error } = await this.supabase
+      .from("project_team_members")
+      .insert({
+        project_id: data.projectId,
+        user_id: data.userId,
+        role: "member",
+        invited_by: data.invitedBy,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return member;
+  }
+
+  async removeTeamMember(memberId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from("project_team_members")
+      .delete()
+      .eq("id", memberId);
+
+    if (error) throw error;
+  }
+
+  async isProjectMember(projectId: string, userId: string): Promise<boolean> {
+    const { data, error } = await this.supabase
+      .from("project_team_members")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("user_id", userId)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return !!data;
+  }
+
+  async isProjectOwner(projectId: string, userId: string): Promise<boolean> {
+    const { data, error } = await this.supabase
+      .from("project_team_members")
+      .select("role")
+      .eq("project_id", projectId)
+      .eq("user_id", userId)
+      .eq("role", "owner")
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return !!data;
+  }
+
+  async canAddTeamMember(userId: string, projectId: string): Promise<boolean> {
+    const { data, error } = await this.supabase.rpc("can_add_team_member", {
+      p_user_id: userId,
+      p_project_id: projectId,
+    });
+
+    if (error) throw error;
+    return data;
+  }
+
+  async getProjectTeamCount(projectId: string): Promise<number> {
+    const { data, error } = await this.supabase.rpc("get_project_team_count", {
+      p_project_id: projectId,
+    });
+
+    if (error) throw error;
+    return data || 0;
+  }
+
+  // Project invitations
+  async createInvitation(data: {
+    projectId: string;
+    email: string;
+    invitedBy: string;
+    token: string;
+    expiresAt: Date;
+  }): Promise<{ id: string; token: string; expires_at: string }> {
+    const { data: row, error } = await this.supabase
+      .from("project_invitations")
+      .insert({
+        project_id: data.projectId,
+        email: data.email.toLowerCase().trim(),
+        invited_by: data.invitedBy,
+        token: data.token,
+        expires_at: data.expiresAt.toISOString(),
+        status: "pending",
+      })
+      .select("id, token, expires_at")
+      .single();
+
+    if (error) throw error;
+    return {
+      id: row.id,
+      token: row.token,
+      expires_at: row.expires_at,
+    };
+  }
+
+  async getInvitationByToken(token: string): Promise<{
+    id: string;
+    project_id: string;
+    project_name: string;
+    email: string;
+    invited_by: string;
+    status: string;
+    expires_at: string;
+  } | null> {
+    const { data, error } = await this.supabase
+      .from("project_invitations")
+      .select(
+        "id, project_id, email, invited_by, status, expires_at, projects(name)"
+      )
+      .eq("token", token)
+      .single();
+
+    if (error || !data) return null;
+    const project = (data as any).projects;
+    if (!project?.name) return null;
+    const expiresAt = new Date(data.expires_at);
+    if (expiresAt < new Date() || data.status !== "pending") return null;
+    return {
+      id: data.id,
+      project_id: data.project_id,
+      project_name: (project as { name: string }).name,
+      email: data.email,
+      invited_by: data.invited_by,
+      status: data.status,
+      expires_at: data.expires_at,
+    };
+  }
+
+  async listPendingInvitations(
+    projectId: string
+  ): Promise<
+    Array<{
+      id: string;
+      email: string;
+      invited_by: string;
+      expires_at: string;
+      created_at: string;
+    }>
+  > {
+    const { data, error } = await this.supabase
+      .from("project_invitations")
+      .select("id, email, invited_by, expires_at, created_at")
+      .eq("project_id", projectId)
+      .eq("status", "pending")
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return (data || []).map((row) => ({
+      id: row.id,
+      email: row.email,
+      invited_by: row.invited_by,
+      expires_at: row.expires_at,
+      created_at: row.created_at,
+    }));
+  }
+
+  async acceptInvitation(
+    token: string,
+    userId: string
+  ): Promise<{ projectId: string; projectName: string } | { error: string }> {
+    const inv = await this.getInvitationByToken(token);
+    if (!inv) return { error: "Invalid or expired invitation" };
+
+    const { data: authUser } = await this.supabase.auth.admin.getUserById(
+      userId
+    );
+    if (!authUser?.user?.email) return { error: "User not found" };
+    const userEmail = authUser.user.email.toLowerCase().trim();
+    if (userEmail !== inv.email.toLowerCase()) {
+      return { error: "This invitation was sent to a different email address" };
+    }
+
+    const alreadyMember = await this.isProjectMember(inv.project_id, userId);
+    if (alreadyMember) {
+      await this.supabase
+        .from("project_invitations")
+        .update({ status: "accepted" })
+        .eq("id", inv.id);
+      return { projectId: inv.project_id, projectName: inv.project_name };
+    }
+
+    await this.addTeamMember({
+      projectId: inv.project_id,
+      userId,
+      invitedBy: inv.invited_by,
+    });
+
+    await this.supabase
+      .from("project_invitations")
+      .update({ status: "accepted" })
+      .eq("id", inv.id);
+
+    return { projectId: inv.project_id, projectName: inv.project_name };
+  }
+
+  // RevenueCat Integration
+  async updateProjectRevenueCatConfig(
+    projectId: string,
+    config: {
+      revenuecat_secret_key: string | null;
+      revenuecat_project_id: string | null;
+      revenuecat_enabled: boolean;
+    }
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .from("projects")
+      .update({
+        revenuecat_secret_key: config.revenuecat_secret_key,
+        revenuecat_project_id: config.revenuecat_project_id,
+        revenuecat_enabled: config.revenuecat_enabled,
+      })
+      .eq("id", projectId);
+
+    if (error) throw error;
   }
 }

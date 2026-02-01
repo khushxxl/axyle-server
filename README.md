@@ -5,12 +5,28 @@ Backend API server for the Expo Analytics SDK. Handles event ingestion, storage,
 ## Features
 
 - ✅ Event ingestion with batch processing
-- ✅ API key authentication
-- ✅ Rate limiting
+- ✅ Secure API key authentication (SHA-256 hashing)
+- ✅ Rate limiting (general + per-endpoint)
+- ✅ HTTPS enforcement in production
+- ✅ Comprehensive security headers (Helmet.js)
+- ✅ AES-256-GCM encryption for sensitive data
 - ✅ SDK configuration endpoint
 - ✅ Analytics query endpoints
 - ✅ PostgreSQL database integration
 - ✅ Error handling and logging
+- ✅ Welcome email system with Resend
+
+## 🔐 Security
+
+This API implements enterprise-grade security features:
+
+- **API Key Storage**: SHA-256 hashing (one-way, cannot be reversed)
+- **Sensitive Data**: AES-256-GCM encryption for third-party API keys
+- **HTTPS**: Enforced in production
+- **Rate Limiting**: Protection against brute force and abuse
+- **Security Headers**: HSTS, CSP, XSS protection, and more
+
+**⚠️ Important**: Before deploying to production, review [SECURITY.md](./SECURITY.md) for required environment variables and security best practices.
 
 ## Prerequisites
 
@@ -40,15 +56,22 @@ npm install
 
 3. Set up environment variables:
 
+For **development**:
 ```bash
-# Create .env file with your Supabase credentials
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-SUPABASE_ANON_KEY=your-anon-key
+# Copy the development example
+cp .env.development.example .env
 
-# Optional: OpenAI API key for AI assistant feature
-OPENAI_API_KEY=your-openai-api-key
+# Generate secure secrets
+./scripts/generate-secrets.sh
+
+# Edit .env and add:
+# - Generated JWT_SECRET
+# - Generated API_KEY_ENCRYPTION_KEY
+# - Your Supabase credentials
+# - (Optional) OpenAI API key
 ```
+
+For **production**, see [SECURITY.md](./SECURITY.md) for complete setup instructions.
 
 ## Configuration
 
@@ -81,6 +104,12 @@ npm run dev
 ```
 
 ### Production
+
+**⚠️ Before deploying to production:**
+1. Review [SECURITY.md](./SECURITY.md) for security requirements
+2. Generate production secrets: `./scripts/generate-secrets.sh`
+3. Set all required environment variables
+4. Enable HTTPS on your hosting platform
 
 ```bash
 npm run build
@@ -183,6 +212,35 @@ After running the seed data migration, you can use:
 - Project ID: `00000000-0000-0000-0000-000000000001`
 
 Note: Seed data is optional and only for development/testing.
+
+## Security
+
+See [SECURITY.md](./SECURITY.md) for:
+- Required environment variables
+- Security features and implementation details
+- Deployment checklist
+- Vulnerability reporting
+- Best practices for production
+
+## Environment Variables
+
+### Required
+- `JWT_SECRET` - Min 32 characters, cryptographically random
+- `API_KEY_ENCRYPTION_KEY` - Min 32 characters, cryptographically random
+- `SUPABASE_URL` - Your Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
+- `SUPABASE_ANON_KEY` - Supabase anonymous key
+- `CORS_ORIGIN` - Your web app domain (production only)
+
+### Optional
+- `OPENAI_API_KEY` - For AI assistant feature
+- `RESEND_API_KEY` - For email notifications
+- Rate limiting configuration (see `.env.example`)
+
+Generate secure secrets with:
+```bash
+./scripts/generate-secrets.sh
+```
 
 ## License
 

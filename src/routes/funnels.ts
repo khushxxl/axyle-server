@@ -58,7 +58,7 @@ router.post("/", async (req: Request, res: Response) => {
       name,
       steps,
       chart_type: chart_type || "funnel",
-      pinned: pinned || false,
+      pinned: pinned !== undefined ? pinned : true,
     });
 
     res.status(201).json({

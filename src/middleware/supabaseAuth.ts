@@ -13,6 +13,7 @@ declare global {
     interface Request {
       supabaseUserId?: string;
       supabaseUser?: any;
+      supabaseAuthError?: string;
     }
   }
 }
@@ -63,6 +64,7 @@ export async function validateSupabaseAuth(
     if (error || !user) {
       // Invalid token, but don't fail - just continue without user
       console.warn('⚠️  Invalid Supabase token:', error?.message);
+      req.supabaseAuthError = error?.message || 'Invalid Supabase token';
       return next();
     }
 
@@ -74,6 +76,8 @@ export async function validateSupabaseAuth(
   } catch (error) {
     console.error('Supabase auth validation error:', error);
     // Don't fail the request, just continue without user
+    req.supabaseAuthError =
+      error instanceof Error ? error.message : 'Supabase auth validation error';
     next();
   }
 }

@@ -62,8 +62,26 @@ export interface PlatformUser {
   onboarding_completed: boolean;
   subscription_status: string;
   subscription_plan: string;
+  welcome_email_sent: boolean;
+  welcome_email_sent_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface TeamMember {
+  id: string;
+  project_id: string;
+  user_id: string;
+  role: "owner" | "member";
+  invited_by: string;
+  invited_at: string;
+  created_at: string;
+  user?: {
+    id: string;
+    email?: string;
+    name?: string;
+    avatar_url?: string;
+  };
 }
 
 export interface StorageAdapter {
@@ -181,4 +199,54 @@ export interface StorageAdapter {
       subscription_plan?: string;
     }
   ): Promise<PlatformUser>;
+  getUserByEmail(email: string): Promise<PlatformUser | null>;
+
+  // Team Members
+  getProjectTeamMembers(projectId: string): Promise<TeamMember[]>;
+  getTeamMember(memberId: string): Promise<TeamMember | null>;
+  addTeamMember(data: {
+    projectId: string;
+    userId: string;
+    invitedBy: string;
+  }): Promise<TeamMember>;
+  removeTeamMember(memberId: string): Promise<void>;
+  isProjectMember(projectId: string, userId: string): Promise<boolean>;
+  isProjectOwner(projectId: string, userId: string): Promise<boolean>;
+  canAddTeamMember(userId: string, projectId: string): Promise<boolean>;
+  getProjectTeamCount(projectId: string): Promise<number>;
+
+  // Project invitations (invite by email; no account required)
+  createInvitation(data: {
+    projectId: string;
+    email: string;
+    invitedBy: string;
+    token: string;
+    expiresAt: Date;
+  }): Promise<{ id: string; token: string; expires_at: string }>;
+  getInvitationByToken(token: string): Promise<{
+    id: string;
+    project_id: string;
+    project_name: string;
+    email: string;
+    invited_by: string;
+    status: string;
+    expires_at: string;
+  } | null>;
+  listPendingInvitations(projectId: string): Promise<
+    Array<{ id: string; email: string; invited_by: string; expires_at: string; created_at: string }>
+  >;
+  acceptInvitation(
+    token: string,
+    userId: string,
+  ): Promise<{ projectId: string; projectName: string } | { error: string }>;
+
+  // RevenueCat Integration
+  updateProjectRevenueCatConfig(
+    projectId: string,
+    config: {
+      revenuecat_secret_key: string | null;
+      revenuecat_project_id: string | null;
+      revenuecat_enabled: boolean;
+    }
+  ): Promise<void>;
 }

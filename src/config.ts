@@ -6,11 +6,99 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+/**
+ * Validates that a required environment variable is set
+ */
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `❌ SECURITY ERROR: Required environment variable ${name} is not set. ` +
+        `Please set it in your .env file or environment. See SECURITY.md for details.`
+    );
+  }
+  return value;
+}
+
+/**
+ * Validates encryption key meets minimum security requirements
+ */
+function validateEncryptionKey(key: string): string {
+  if (key.length < 32) {
+    throw new Error(
+      `❌ SECURITY ERROR: API_KEY_ENCRYPTION_KEY must be at least 32 characters long. ` +
+        `Current length: ${key.length}. Use a cryptographically random string.`
+    );
+  }
+  // Check for common weak patterns
+  if (
+    key.includes("change-me") ||
+    key.includes("password") ||
+    key.includes("secret") ||
+    key === "a".repeat(key.length)
+  ) {
+    throw new Error(
+      `❌ SECURITY ERROR: API_KEY_ENCRYPTION_KEY appears to be a weak or default value. ` +
+        `Use a cryptographically random string (e.g., generated with: openssl rand -base64 32)`
+    );
+  }
+  return key;
+}
+
+/**
+ * Validates JWT secret meets minimum security requirements
+ */
+function validateJwtSecret(secret: string): string {
+  if (secret.length < 32) {
+    throw new Error(
+      `❌ SECURITY ERROR: JWT_SECRET must be at least 32 characters long. ` +
+        `Current length: ${secret.length}. Use a cryptographically random string.`
+    );
+  }
+  if (
+    secret.includes("change-me") ||
+    secret.includes("password") ||
+    secret.includes("secret") ||
+    secret === "a".repeat(secret.length)
+  ) {
+    throw new Error(
+      `❌ SECURITY ERROR: JWT_SECRET appears to be a weak or default value. ` +
+        `Use a cryptographically random string (e.g., generated with: openssl rand -base64 32)`
+    );
+  }
+  return secret;
+}
+
+/**
+ * Validates CORS origin in production
+ */
+function validateCorsOrigin(origin: string, nodeEnv: string): string {
+  if (nodeEnv === "production" && origin === "*") {
+    console.warn(
+      `⚠️  WARNING: CORS_ORIGIN is set to "*" in production. ` +
+        `This allows any website to access your API. ` +
+        `Set CORS_ORIGIN to your specific domain (e.g., https://yourdomain.com)`
+    );
+  }
+  return origin;
+}
+
+const nodeEnv = process.env.NODE_ENV || "development";
+const corsOrigin = process.env.CORS_ORIGIN || (nodeEnv === "development" ? "*" : "");
+
+// Validate CORS origin
+if (nodeEnv === "production" && !corsOrigin) {
+  throw new Error(
+    `❌ SECURITY ERROR: CORS_ORIGIN must be set in production. ` +
+      `Set it to your web app's domain (e.g., https://yourdomain.com)`
+  );
+}
+
 export const config = {
   server: {
     port: parseInt(process.env.PORT || "3000", 10),
-    nodeEnv: process.env.NODE_ENV || "development",
-    corsOrigin: process.env.CORS_ORIGIN || "*",
+    nodeEnv,
+    corsOrigin: validateCorsOrigin(corsOrigin, nodeEnv),
   },
   supabase: {
     url: process.env.SUPABASE_URL || "",
@@ -18,13 +106,25 @@ export const config = {
     anonKey: process.env.SUPABASE_ANON_KEY || "",
   },
   security: {
-    jwtSecret: process.env.JWT_SECRET || "change-me-in-production",
-    apiKeyEncryptionKey:
-      process.env.API_KEY_ENCRYPTION_KEY || "change-me-in-production",
+    jwtSecret: validateJwtSecret(requireEnv("JWT_SECRET")),
+    apiKeyEncryptionKey: validateEncryptionKey(
+      requireEnv("API_KEY_ENCRYPTION_KEY")
+    ),
   },
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || "60000", 10),
     maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || "1000", 10),
+    // Stricter limits for sensitive endpoints
+    apiKeyCreation: {
+      windowMs: parseInt(
+        process.env.API_KEY_RATE_LIMIT_WINDOW_MS || "3600000",
+        10
+      ), // 1 hour
+      maxRequests: parseInt(
+        process.env.API_KEY_RATE_LIMIT_MAX_REQUESTS || "10",
+        10
+      ),
+    },
   },
   features: {
     enableAnalyticsApi: process.env.ENABLE_ANALYTICS_API !== "false",

@@ -19,7 +19,9 @@ router.get("/me", async (req: Request, res: Response) => {
     if (!userId) {
       return res.status(401).json({
         success: false,
-        error: "Authentication required",
+        error: req.supabaseAuthError
+          ? `Authentication failed: ${req.supabaseAuthError}`
+          : "Authentication required",
       });
     }
 
@@ -59,7 +61,9 @@ router.put("/me", async (req: Request, res: Response) => {
     if (!userId) {
       return res.status(401).json({
         success: false,
-        error: "Authentication required",
+        error: req.supabaseAuthError
+          ? `Authentication failed: ${req.supabaseAuthError}`
+          : "Authentication required",
       });
     }
 

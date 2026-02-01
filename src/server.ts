@@ -4,9 +4,12 @@
 
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import { config } from "./config";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 import { validateSupabaseAuth } from "./middleware/supabaseAuth";
+import { enforceHttps } from "./middleware/security";
+import { generalRateLimiter } from "./middleware/rateLimiting";
 import eventsRouter from "./routes/events";
 import configRouter from "./routes/config";
 import analyticsRouter from "./routes/analytics";
@@ -17,10 +20,53 @@ import segmentsRouter from "./routes/segments";
 import funnelsRouter from "./routes/funnels";
 import usersRouter from "./routes/users";
 import aiRouter from "./routes/ai";
+import webhooksRouter from "./routes/webhooks";
+import teamMembersRouter from "./routes/team-members";
+import revenuecatRouter from "./routes/revenuecat";
+import inviteRouter from "./routes/invite";
 
 const app = express();
 
-// Middleware
+// Security middleware (must be first)
+app.use(enforceHttps);
+
+// Helmet security headers
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    noSniff: true,
+    xssFilter: true,
+    frameguard: {
+      action: "deny",
+    },
+  })
+);
+
+// Additional security headers for sensitive endpoints
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+  // Prevent caching of sensitive responses
+  if (req.path.includes("/api-keys") || req.path.includes("/revenuecat")) {
+    res.setHeader(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, private"
+    );
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+  next();
+});
+
+// CORS middleware
 app.use(
   cors({
     origin: config.server.corsOrigin,
@@ -28,8 +74,12 @@ app.use(
   }),
 );
 
+// Body parsing middleware
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+// Rate limiting middleware (apply before routes)
+app.use(generalRateLimiter);
 
 // Supabase authentication middleware (optional - extracts user if token provided)
 app.use(validateSupabaseAuth);
@@ -62,6 +112,10 @@ app.use("/api/v1/segments", segmentsRouter); // User segments
 app.use("/api/v1/funnels", funnelsRouter); // Funnels
 app.use("/api/v1/users", usersRouter); // Platform users and onboarding
 app.use("/api/v1/ai", aiRouter); // AI assistant
+app.use("/api/v1/webhooks", webhooksRouter); // Webhooks (new user, etc.)
+app.use("/api/v1/projects", teamMembersRouter); // Team members
+app.use("/api/v1/projects", revenuecatRouter); // RevenueCat integration
+app.use("/api/v1/invite", inviteRouter); // Project invite accept
 
 // Error handling
 app.use(notFoundHandler);
