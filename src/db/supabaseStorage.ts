@@ -117,6 +117,9 @@ export class SupabaseStorage implements StorageAdapter {
 
   async getApiKey(plainKey: string): Promise<any | null> {
     const keyHash = hashApiKey(plainKey);
+    // Look up by key_hash only. The "key" column is UUID type (legacy); plain keys
+    // are not stored — we only store key_hash, so comparing key to a non-UUID string
+    // would cause "invalid input syntax for type uuid" in PostgreSQL.
     const { data, error } = await this.supabase
       .from("api_keys")
       .select(
@@ -129,7 +132,7 @@ export class SupabaseStorage implements StorageAdapter {
         projects!inner(id)
       `
       )
-      .or(`key_hash.eq.${keyHash},key.eq.${plainKey}`)
+      .eq("key_hash", keyHash)
       .eq("is_active", true)
       .maybeSingle();
 

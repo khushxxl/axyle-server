@@ -70,35 +70,58 @@ function validateJwtSecret(secret: string): string {
 }
 
 /**
- * Validates CORS origin in production
+ * Parses CORS origin(s) from environment variable
+ * Supports single origin or comma-separated multiple origins
  */
-function validateCorsOrigin(origin: string, nodeEnv: string): string {
-  if (nodeEnv === "production" && origin === "*") {
-    console.warn(
-      `⚠️  WARNING: CORS_ORIGIN is set to "*" in production. ` +
-        `This allows any website to access your API. ` +
-        `Set CORS_ORIGIN to your specific domain (e.g., https://yourdomain.com)`
-    );
+function parseCorsOrigin(origin: string, nodeEnv: string): string | string[] {
+  if (!origin || origin === "*") {
+    if (nodeEnv === "production" && origin === "*") {
+      console.warn(
+        `⚠️  WARNING: CORS_ORIGIN is set to "*" in production. ` +
+          `This allows any website to access your API. ` +
+          `Set CORS_ORIGIN to your specific domain (e.g., https://yourdomain.com)`
+      );
+    }
+    return origin || "*";
   }
+
+  // Check if multiple origins (comma-separated)
+  if (origin.includes(",")) {
+    const origins = origin
+      .split(",")
+      .map((o) => o.trim())
+      .filter((o) => o.length > 0);
+
+    console.log(
+      `✅ CORS configured for ${origins.length} origin(s): ${origins.join(", ")}`
+    );
+    return origins;
+  }
+
+  // Single origin
+  console.log(`✅ CORS configured for origin: ${origin}`);
   return origin;
 }
 
 const nodeEnv = process.env.NODE_ENV || "development";
-const corsOrigin = process.env.CORS_ORIGIN || (nodeEnv === "development" ? "*" : "");
+const corsOriginRaw = process.env.CORS_ORIGIN || (nodeEnv === "development" ? "*" : "");
 
 // Validate CORS origin
-if (nodeEnv === "production" && !corsOrigin) {
+if (nodeEnv === "production" && !corsOriginRaw) {
   throw new Error(
     `❌ SECURITY ERROR: CORS_ORIGIN must be set in production. ` +
-      `Set it to your web app's domain (e.g., https://yourdomain.com)`
+      `Set it to your web app's domain (e.g., https://yourdomain.com) ` +
+      `or multiple domains separated by commas (e.g., https://app.com,https://admin.app.com)`
   );
 }
+
+const corsOrigin = parseCorsOrigin(corsOriginRaw, nodeEnv);
 
 export const config = {
   server: {
     port: parseInt(process.env.PORT || "3000", 10),
     nodeEnv,
-    corsOrigin: validateCorsOrigin(corsOrigin, nodeEnv),
+    corsOrigin,
   },
   supabase: {
     url: process.env.SUPABASE_URL || "",
