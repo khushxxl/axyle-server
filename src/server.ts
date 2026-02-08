@@ -24,6 +24,7 @@ import webhooksRouter from "./routes/webhooks";
 import teamMembersRouter from "./routes/team-members";
 import revenuecatRouter from "./routes/revenuecat";
 import inviteRouter from "./routes/invite";
+import emailsRouter from "./routes/emails";
 
 const app = express();
 
@@ -116,6 +117,7 @@ app.use("/api/v1/webhooks", webhooksRouter); // Webhooks (new user, etc.)
 app.use("/api/v1/projects", teamMembersRouter); // Team members
 app.use("/api/v1/projects", revenuecatRouter); // RevenueCat integration
 app.use("/api/v1/invite", inviteRouter); // Project invite accept
+app.use("/api/v1/emails", emailsRouter);
 
 // Error handling
 app.use(notFoundHandler);

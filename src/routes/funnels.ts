@@ -4,6 +4,7 @@
 
 import { Router, Request, Response } from "express";
 import { storage } from "../db";
+import { getPlanLimits, isUnlimited } from "../config/plan-limits";
 
 const router = Router();
 
@@ -51,6 +52,24 @@ router.post("/", async (req: Request, res: Response) => {
         success: false,
         error: "Access denied",
       });
+    }
+
+    // Enforce plan funnel limit (total across owner's projects)
+    const owner = await storage.getUser(project.user_id);
+    const limits = getPlanLimits(owner?.subscription_plan);
+    if (!isUnlimited(limits.funnels)) {
+      const ownerProjects = await storage.listProjects(project.user_id);
+      const ownerProjectIds = ownerProjects.map((p: { id: string }) => p.id);
+      const currentFunnels =
+        ownerProjectIds.length > 0
+          ? await storage.countFunnelsForProjectIds(ownerProjectIds)
+          : 0;
+      if (currentFunnels >= limits.funnels) {
+        return res.status(402).json({
+          success: false,
+          error: `Funnel limit reached (${limits.funnels} on your plan). Upgrade to create more.`,
+        });
+      }
     }
 
     const funnel = await storage.createFunnel({

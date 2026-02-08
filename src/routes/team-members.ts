@@ -6,6 +6,7 @@ import { Router, Request, Response } from "express";
 import { randomBytes } from "crypto";
 import { storage } from "../db";
 import { emailService } from "../services/emailService";
+import { getPlanLimits, isUnlimited } from "../config/plan-limits";
 
 const router = Router();
 
@@ -104,6 +105,19 @@ router.post("/:projectId/team-members", async (req: Request, res: Response) => {
       });
     }
 
+    // Enforce plan team-seat limit (owner's plan applies to the project)
+    const owner = await storage.getUser(project.user_id);
+    const limits = getPlanLimits(owner?.subscription_plan);
+    if (!isUnlimited(limits.teamSeatsPerProject)) {
+      const currentCount = await storage.getProjectTeamCount(projectId);
+      if (currentCount >= limits.teamSeatsPerProject) {
+        return res.status(402).json({
+          success: false,
+          error: `Team limit reached (${limits.teamSeatsPerProject} seat${limits.teamSeatsPerProject === 1 ? "" : "s"} per project on your plan). Upgrade to add more.`,
+        });
+      }
+    }
+
     // If invitee already has an account and is not a member, add them directly and send email
     const memberUser = await storage.getUserByEmail(email);
     if (memberUser) {
@@ -116,15 +130,9 @@ router.post("/:projectId/team-members", async (req: Request, res: Response) => {
       }
       const canAdd = await storage.canAddTeamMember(userId, projectId);
       if (!canAdd) {
-        const limits = {
-          free: "Free plan does not support team members",
-          pro: "Pro plan allows up to 3 additional team members (4 total including owner)",
-          business: "Business plan allows up to 10 additional team members (11 total including owner)",
-        };
         return res.status(403).json({
           success: false,
-          error: limits[user.subscription_plan as keyof typeof limits] || "Team member limit reached",
-          currentPlan: user.subscription_plan,
+          error: "Cannot add this team member.",
         });
       }
       await storage.addTeamMember({

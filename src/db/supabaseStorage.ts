@@ -1214,6 +1214,16 @@ export class SupabaseStorage implements StorageAdapter {
     return data || [];
   }
 
+  async countFunnelsForProjectIds(projectIds: string[]): Promise<number> {
+    if (!projectIds.length) return 0;
+    const { count, error } = await this.supabase
+      .from("funnels")
+      .select("*", { count: "exact", head: true })
+      .in("project_id", projectIds);
+    if (error) throw error;
+    return count ?? 0;
+  }
+
   async updateFunnel(
     id: string,
     data: {

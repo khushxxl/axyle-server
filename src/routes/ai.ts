@@ -10,6 +10,55 @@ import { requireSupabaseAuth } from "../middleware/supabaseAuth";
 
 const router = Router();
 
+/**
+ * Parse a user message for date range intent (e.g. "last 30 days", "past 2 weeks", "this month")
+ * Returns { days, label } or null if no date range detected
+ */
+function parseDateRangeFromMessage(message: string): { days: number; label: string } | null {
+  const msg = message.toLowerCase();
+
+  // "last/past N days"
+  const daysMatch = msg.match(/(?:last|past|previous)\s+(\d+)\s*days?/);
+  if (daysMatch) {
+    const days = Math.min(parseInt(daysMatch[1], 10), 365);
+    return { days, label: `last ${days} days` };
+  }
+
+  // "last/past N weeks"
+  const weeksMatch = msg.match(/(?:last|past|previous)\s+(\d+)\s*weeks?/);
+  if (weeksMatch) {
+    const weeks = Math.min(parseInt(weeksMatch[1], 10), 52);
+    return { days: weeks * 7, label: `last ${weeks} week${weeks > 1 ? "s" : ""}` };
+  }
+
+  // "last/past N months"
+  const monthsMatch = msg.match(/(?:last|past|previous)\s+(\d+)\s*months?/);
+  if (monthsMatch) {
+    const months = Math.min(parseInt(monthsMatch[1], 10), 12);
+    return { days: months * 30, label: `last ${months} month${months > 1 ? "s" : ""}` };
+  }
+
+  // "this week" / "this month" / "this year"
+  if (/\bthis\s+week\b/.test(msg)) return { days: 7, label: "this week" };
+  if (/\bthis\s+month\b/.test(msg)) return { days: 30, label: "this month" };
+  if (/\bthis\s+year\b/.test(msg)) return { days: 365, label: "this year" };
+
+  // "last week" / "last month" (without a number)
+  if (/\blast\s+week\b/.test(msg) && !daysMatch && !weeksMatch) return { days: 7, label: "last week" };
+  if (/\blast\s+month\b/.test(msg) && !monthsMatch) return { days: 30, label: "last month" };
+
+  // "past year" / "last year"
+  if (/(?:last|past)\s+year\b/.test(msg)) return { days: 365, label: "last year" };
+
+  // "today"
+  if (/\btoday\b/.test(msg)) return { days: 1, label: "today" };
+
+  // "yesterday"
+  if (/\byesterday\b/.test(msg)) return { days: 2, label: "last 2 days" };
+
+  return null;
+}
+
 // Initialize OpenAI client
 const openai = config.openai.apiKey
   ? new OpenAI({
@@ -73,19 +122,32 @@ router.post(
           projects.length > 0 ? projects.map((p) => p.id) : undefined;
       }
 
-      // For "All Projects" view, use all-time data (no date filter)
-      // For specific project, use last 7 days for more focused analysis
+      // Detect date range from the user's message, or default to 7 days for a project
+      const parsedRange = parseDateRangeFromMessage(message);
+      const rangeDays = parsedRange ? parsedRange.days : 7;
+      const rangeLabel = parsedRange ? parsedRange.label : "last 7 days";
+
       const dateRange = selectedProject
         ? (() => {
             const endDate = new Date();
             const startDate = new Date();
-            startDate.setDate(startDate.getDate() - 7);
+            startDate.setDate(startDate.getDate() - rangeDays);
             return {
               startDate: startDate.toISOString().split("T")[0],
               endDate: endDate.toISOString().split("T")[0],
             };
           })()
-        : undefined; // No date filter for all projects = all-time data
+        : parsedRange
+          ? (() => {
+              const endDate = new Date();
+              const startDate = new Date();
+              startDate.setDate(startDate.getDate() - rangeDays);
+              return {
+                startDate: startDate.toISOString().split("T")[0],
+                endDate: endDate.toISOString().split("T")[0],
+              };
+            })()
+          : undefined; // No date filter for all projects when no range mentioned
 
       // Fetch analytics data for the selected project(s)
       const [
@@ -128,31 +190,34 @@ router.post(
               )
               .catch(() => [])
           : Promise.resolve([]),
-        // Fetch recent events for trend analysis
-        projectIds && projectIds.length > 0
-          ? Promise.all(
-              projectIds.map((pid) =>
-                storage
-                  .getAllEvents({
-                    ...(dateRange && {
-                      startDate: dateRange.startDate,
-                      endDate: dateRange.endDate,
-                    }),
-                    limit: 10000,
-                    projectId: pid,
-                  })
-                  .catch(() => [])
-              )
-            ).then((results) => results.flat())
-          : storage
-              .getAllEvents({
-                ...(dateRange && {
-                  startDate: dateRange.startDate,
-                  endDate: dateRange.endDate,
-                }),
-                limit: 10000,
-              })
-              .catch(() => []),
+        // Fetch recent events for trend analysis (cap to avoid overloading)
+        (() => {
+          const eventLimit = rangeDays > 90 ? 5000 : 10000;
+          return projectIds && projectIds.length > 0
+            ? Promise.all(
+                projectIds.map((pid) =>
+                  storage
+                    .getAllEvents({
+                      ...(dateRange && {
+                        startDate: dateRange.startDate,
+                        endDate: dateRange.endDate,
+                      }),
+                      limit: eventLimit,
+                      projectId: pid,
+                    })
+                    .catch(() => [])
+                )
+              ).then((results) => results.flat())
+            : storage
+                .getAllEvents({
+                  ...(dateRange && {
+                    startDate: dateRange.startDate,
+                    endDate: dateRange.endDate,
+                  }),
+                  limit: eventLimit,
+                })
+                .catch(() => []);
+        })(),
       ]);
 
       // Build comprehensive system prompt with analytics context for selected project
@@ -179,7 +244,7 @@ ${projects
       }
 
       // Overview stats (for selected project or all projects)
-      const timeRangeText = dateRange ? ` (last 7 days)` : ` (all-time)`;
+      const timeRangeText = dateRange ? ` (${rangeLabel})` : ` (all-time)`;
       const scopeText = selectedProject
         ? `for the "${selectedProject.name}" project`
         : `across ALL your projects (cumulative totals)`;
@@ -293,101 +358,58 @@ ${eventNames.slice(0, 50).join(", ")}${eventNames.length > 50 ? "..." : ""}`);
         contextSections.push("## User Segments\nNo segments created yet.");
       }
 
-      // Helper function to extract country from timezone or locale
-      const getCountryFromContext = (event: any): string | null => {
-        const context = event.context || {};
-        const timezone = context.timezone || event.timezone;
-        const locale = context.locale || event.locale;
-
-        // Try to extract country from timezone (e.g., "America/New_York" -> "US")
-        if (timezone) {
-          // Common timezone to country mappings
-          const timezoneToCountry: Record<string, string> = {
-            "America/New_York": "US",
-            "America/Chicago": "US",
-            "America/Denver": "US",
-            "America/Los_Angeles": "US",
-            "America/Phoenix": "US",
-            "America/Anchorage": "US",
-            "America/Honolulu": "US",
-            "Europe/London": "UK",
-            "Europe/Paris": "FR",
-            "Europe/Berlin": "DE",
-            "Europe/Rome": "IT",
-            "Europe/Madrid": "ES",
-            "Europe/Amsterdam": "NL",
-            "Europe/Stockholm": "SE",
-            "Europe/Copenhagen": "DK",
-            "Europe/Oslo": "NO",
-            "Europe/Helsinki": "FI",
-            "Europe/Dublin": "IE",
-            "Europe/Athens": "GR",
-            "Europe/Lisbon": "PT",
-            "Europe/Vienna": "AT",
-            "Europe/Brussels": "BE",
-            "Europe/Warsaw": "PL",
-            "Europe/Prague": "CZ",
-            "Europe/Budapest": "HU",
-            "Europe/Bucharest": "RO",
-            "Asia/Tokyo": "JP",
-            "Asia/Shanghai": "CN",
-            "Asia/Hong_Kong": "HK",
-            "Asia/Singapore": "SG",
-            "Asia/Seoul": "KR",
-            "Asia/Dubai": "AE",
-            "Asia/Mumbai": "IN",
-            "Asia/Bangkok": "TH",
-            "Asia/Jakarta": "ID",
-            "Asia/Manila": "PH",
-            "Australia/Sydney": "AU",
-            "Australia/Melbourne": "AU",
-            "Australia/Brisbane": "AU",
-            "Pacific/Auckland": "NZ",
-            "America/Toronto": "CA",
-            "America/Vancouver": "CA",
-            "America/Mexico_City": "MX",
-            "America/Sao_Paulo": "BR",
-            "America/Buenos_Aires": "AR",
-            "Africa/Cairo": "EG",
-            "Africa/Johannesburg": "ZA",
-          };
-
-          if (timezoneToCountry[timezone]) {
-            return timezoneToCountry[timezone];
-          }
-
-          // Try to infer from timezone string pattern
-          if (timezone.includes("America")) return "US";
-          if (timezone.includes("Europe")) return "EU";
-          if (timezone.includes("Asia")) return "ASIA";
-          if (timezone.includes("Australia") || timezone.includes("Pacific"))
-            return "AU";
+      // Extract country from locale string (e.g., "en-GB" -> "GB", "fr-FR" -> "FR")
+      const getCountryFromLocale = (locale: string | null | undefined): string | null => {
+        if (!locale) return null;
+        const parts = String(locale).split(/[-_]/);
+        if (parts.length >= 2) {
+          const code = parts[1].toUpperCase();
+          if (code.length === 2 && /^[A-Z]{2}$/.test(code)) return code;
         }
-
-        // Try to extract country from locale (e.g., "en-US" -> "US", "fr-FR" -> "FR")
-        if (locale) {
-          const localeParts = String(locale).split(/[-_]/);
-          if (localeParts.length >= 2) {
-            const countryCode = localeParts[1].toUpperCase();
-            // Validate it's a 2-letter country code
-            if (countryCode.length === 2 && /^[A-Z]{2}$/.test(countryCode)) {
-              return countryCode;
-            }
-          }
-        }
-
         return null;
       };
 
-      // Extract users by country from events
+      // Extract location data from events using locale and timezone fields
       const usersByCountry: Record<string, Set<string>> = {};
       const eventsByCountry: Record<string, number> = {};
+      const localeDistribution: Record<string, number> = {};
+      const timezoneDistribution: Record<string, number> = {};
 
       if (recentEvents && recentEvents.length > 0) {
+        // Debug: log a sample event to verify locale/timezone fields
+        const sample = recentEvents[0];
+        console.log("[AI] Sample event fields:", {
+          locale: sample.locale,
+          timezone: sample.timezone,
+          contextType: typeof sample.context,
+          contextLocale: typeof sample.context === "object" ? sample.context?.locale : "string-context",
+        });
+
         recentEvents.forEach((event: any) => {
-          const country = getCountryFromContext(event);
+          // Parse context if needed (Supabase JSONB returns object, but handle string too)
+          let ctx: any = {};
+          if (typeof event.context === "string") {
+            try { ctx = JSON.parse(event.context); } catch { ctx = {}; }
+          } else if (event.context && typeof event.context === "object") {
+            ctx = event.context;
+          }
+
+          // Get locale from top-level column OR context object
+          const locale = event.locale || ctx.locale;
+          const timezone = event.timezone || ctx.timezone;
+
+          // Track locale distribution
+          if (locale) {
+            localeDistribution[locale] = (localeDistribution[locale] || 0) + 1;
+          }
+          // Track timezone distribution
+          if (timezone) {
+            timezoneDistribution[timezone] = (timezoneDistribution[timezone] || 0) + 1;
+          }
+
+          // Extract country from locale
+          const country = getCountryFromLocale(locale);
           if (country) {
-            // Track unique users by country
             const userId = event.user_id || event.anonymous_id;
             if (userId) {
               if (!usersByCountry[country]) {
@@ -395,7 +417,6 @@ ${eventNames.slice(0, 50).join(", ")}${eventNames.length > 50 ? "..." : ""}`);
               }
               usersByCountry[country].add(userId);
             }
-            // Track event counts by country
             eventsByCountry[country] = (eventsByCountry[country] || 0) + 1;
           }
         });
@@ -410,22 +431,51 @@ ${eventNames.slice(0, 50).join(", ")}${eventNames.length > 50 ? "..." : ""}`);
             eventCount: eventsByCountry[country] || 0,
           }))
           .sort((a, b) => b.userCount - a.userCount)
-          .slice(0, 20); // Top 20 countries
+          .slice(0, 20);
 
-        let countryText = `## Users by Country\n`;
-        countryText += `Location data is extracted from event context (timezone and locale fields). Here are the top countries:\n\n`;
+        let countryText = `## Users by Country (from locale data)\n`;
         countryStats.forEach((stat, index) => {
-          countryText += `${index + 1}. **${
-            stat.country
-          }**: ${stat.userCount.toLocaleString()} unique users, ${stat.eventCount.toLocaleString()} events\n`;
+          countryText += `${index + 1}. **${stat.country}**: ${stat.userCount.toLocaleString()} unique users, ${stat.eventCount.toLocaleString()} events\n`;
         });
-        countryText += `\n**Important**: All events in the dataset include location metadata in their context object. Each event has a \`context\` field containing \`timezone\` and \`locale\` properties that can be used to determine the user's country. You can answer questions about user distribution by country, geographic trends, location-based analytics, and country-specific metrics. When asked about countries, locations, or geographic data, use this country distribution information to provide detailed, data-driven answers.`;
+
+        // Add locale breakdown
+        const topLocales = Object.entries(localeDistribution)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 10);
+        if (topLocales.length > 0) {
+          countryText += `\n**Locale breakdown:** ${topLocales.map(([l, c]) => `${l} (${c})`).join(", ")}\n`;
+        }
+
+        // Add timezone breakdown
+        const topTimezones = Object.entries(timezoneDistribution)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 10);
+        if (topTimezones.length > 0) {
+          countryText += `**Timezone breakdown:** ${topTimezones.map(([t, c]) => `${t} (${c})`).join(", ")}\n`;
+        }
+
         contextSections.push(countryText);
       } else if (recentEvents && recentEvents.length > 0) {
-        // Even if we couldn't extract countries, mention that location data exists
-        contextSections.push(
-          `## Location Data Availability\nAll events include location metadata in their context (timezone and locale fields). While country extraction may not be available for all events, the raw location data is present in each event's context object and can be analyzed for geographic insights.`
-        );
+        // Fallback: show raw locale/timezone data even if country extraction failed
+        const topLocales = Object.entries(localeDistribution)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 10);
+        const topTimezones = Object.entries(timezoneDistribution)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 10);
+
+        let locText = `## User Location Data\n`;
+        locText += `${recentEvents.length} events analyzed.\n`;
+        if (topLocales.length > 0) {
+          locText += `**Locales:** ${topLocales.map(([l, c]) => `${l} (${c} events)`).join(", ")}\n`;
+        }
+        if (topTimezones.length > 0) {
+          locText += `**Timezones:** ${topTimezones.map(([t, c]) => `${t} (${c} events)`).join(", ")}\n`;
+        }
+        if (topLocales.length === 0 && topTimezones.length === 0) {
+          locText += `No locale or timezone data found in events.\n`;
+        }
+        contextSections.push(locText);
       }
 
       // Event Trends - Daily breakdown for last 7 days
@@ -453,7 +503,7 @@ ${eventNames.slice(0, 50).join(", ")}${eventNames.length > 50 ? "..." : ""}`);
         const sortedDates = Object.keys(eventsByDate).sort();
 
         if (sortedDates.length > 0) {
-          let trendsText = `## Event Trends (Last 7 Days)\n\n`;
+          let trendsText = `## Event Trends (${rangeLabel})\n\n`;
           trendsText += `**Daily Event Counts:**\n`;
           sortedDates.forEach((date) => {
             const dayData = eventsByDate[date];
@@ -505,41 +555,67 @@ Showing activity over the last ${stats.eventsOverTime.length} time periods.`);
       }
 
       // Build system prompt with analytics context
-      const projectContext = selectedProject
-        ? `You are analyzing data for the project "${selectedProject.name}" (${selectedProject.environment}). **CRITICAL**: Focus ALL your responses exclusively on this specific project only. When mentioning metrics, events, users, or any data, always specify that it's for the "${selectedProject.name}" project. Do NOT mention or reference other projects unless explicitly asked. Do NOT use cumulative language like "across all projects" - speak only about this project.`
-        : `You are analyzing data across ALL projects cumulatively. **CRITICAL**: When mentioning metrics, events, users, or any data, always clarify that these are cumulative totals across all projects. Use language like "across all your projects", "total across all projects", or "combined from all projects". You can reference individual projects when relevant, but default to cumulative/aggregate language.`;
+      const projectScope = selectedProject
+        ? `You are analyzing data specifically for the **"${selectedProject.name}"** project (${selectedProject.environment}). All numbers and insights refer to this project only. Never say "across all projects" — speak only about "${selectedProject.name}".`
+        : `You are analyzing aggregate data across ALL of the user's projects. Always clarify that numbers are cumulative totals. You may reference individual projects when helpful.`;
 
-      const projectSpecificGuidance = selectedProject
-        ? `**IMPORTANT**: Always speak about the "${selectedProject.name}" project specifically. Use phrases like "in this project", "for ${selectedProject.name}", or "in the ${selectedProject.name} project". Never use cumulative language unless explicitly asked about other projects.`
-        : `**IMPORTANT**: Always speak about cumulative/aggregate data across all projects. Use phrases like "across all your projects", "total across all projects", "combined from all projects", or "aggregate across all projects". When mentioning specific numbers, clarify they are totals across all projects.`;
+      const systemPrompt = `You are Axyle AI — a sharp, senior-level analytics advisor embedded inside an analytics platform. You have deep expertise in product analytics, growth metrics, and user behavior. You speak with confidence, specificity, and clarity. You're not a generic chatbot — you're the user's personal data analyst.
 
-      const systemPrompt = `You are an AI analytics assistant helping users understand their app analytics data. ${projectContext}
+${projectScope}
 
+# Analytics Context
 ${contextSections.join("\n\n")}
 
-Your role:
-- Answer questions about analytics data clearly and concisely
-- Provide insights based on the actual data provided above
-- ${projectSpecificGuidance}
-- Reference specific funnels, flows, segments, and events by name when relevant
-- Suggest best practices for analytics tracking
-- Help users understand their user behavior patterns
-- Be helpful, friendly, and professional
-- If data is missing or insufficient, explain what's needed and how to get it
-- Format responses with markdown for better readability (use **bold** for emphasis, bullet points with •, numbered lists)
-- When discussing funnels, mention the specific steps and conversion rates
-- When discussing flows, reference completion rates and drop-off points
-- When discussing segments, mention the criteria and user counts
-- When discussing events, reference specific event names and their occurrence counts
-- **IMPORTANT: Location Data Availability**: All events include location metadata in their context (timezone and locale fields). You can answer questions about:
-  - User distribution by country
-  - Geographic trends and patterns
-  - Country-specific analytics (e.g., "users by country", "events from US", "conversion by country")
-  - Location-based user behavior
-  Use the "Users by Country" section above to provide specific country-level insights. If a user asks about countries, locations, or geographic data, analyze the country distribution data provided and give detailed, data-driven answers.
-- **CRITICAL: Always end every response with a follow-up question.** After providing your answer, ask a related or unrelated question that could help the user discover more insights or explore other aspects of their analytics. The follow-up question should be engaging and encourage further conversation. Examples: "Would you like me to analyze which events correlate with user retention?" or "Have you considered tracking conversion funnels for your top events?" or "What other metrics would you like to explore?"
+# Response Guidelines
 
-Keep responses focused and actionable. Use the data provided to give specific, data-driven answers. Always conclude with a thoughtful follow-up question to keep the conversation going.`;
+**Personality & Tone:**
+- Be direct and confident. Lead with the insight, not a preamble.
+- Sound like a smart colleague who just pulled up the data — not a customer support bot.
+- Use natural language. Avoid phrases like "Based on the data provided" or "I can see that" — just state the insight.
+- Be concise but thorough. Every sentence should add value.
+
+**Data & Insights:**
+- Always ground responses in the actual numbers above. Cite specific event names, counts, rates, and percentages.
+- When you spot something interesting (anomaly, trend, drop-off), proactively call it out even if the user didn't ask.
+- Compare and contextualize: "That's a 23% completion rate, which is below typical benchmarks of ~35% for onboarding flows."
+- If data is missing or insufficient, be honest and suggest what to track.
+
+**Formatting:**
+- Use markdown effectively: **bold** key metrics, numbered lists for rankings.
+- When showing trends, describe the direction clearly: "up 12% day-over-day" or "declining steadily since Monday."
+- Keep paragraphs short (2-3 sentences max). Use line breaks generously.
+
+**Charts & Visualizations:**
+When your response involves numerical data that would be clearer as a visual (rankings, distributions, trends over time, funnel steps, comparisons), include a chart block. Use this exact format — a fenced code block with the language tag \`chart\`:
+
+\`\`\`chart
+{"type":"bar","title":"Top Events","data":[{"name":"screen_view","value":1234},{"name":"button_click","value":890}]}
+\`\`\`
+
+Chart types available:
+- \`bar\` — for rankings, comparisons, distributions (e.g. top events, users by country). Use keys: \`name\` and \`value\`.
+- \`line\` — for trends over time (e.g. daily event counts). Use keys: \`name\` (date/label) and \`value\`.
+- \`pie\` — for proportional breakdowns (e.g. event share, device split). Use keys: \`name\` and \`value\`.
+- \`funnel\` — for sequential drop-off (e.g. funnel steps, flow completion). Use keys: \`name\` and \`value\` in descending order.
+
+Rules:
+- The JSON must be valid and on a single line inside the code block.
+- Always include a \`title\` field.
+- Keep data arrays to 10 items max for readability. Aggregate smaller items into an "Other" entry if needed.
+- Place the chart block inline in your response where it fits naturally — after introducing the data, before your analysis of it.
+- You can include multiple chart blocks in one response if the user asks about different datasets.
+- Still include a brief text summary of the key numbers — don't rely solely on the chart.
+
+**Scope:**
+- Reference funnels by name and their specific steps and conversion rates.
+- Reference flows with completion rates and drop-off points.
+- Reference segments with their criteria and user counts.
+- Reference events by their exact names and occurrence counts.
+- Location/geographic data is available via timezone and locale fields — use the country distribution data to answer geographic questions.
+
+**Engagement:**
+- End every response with a brief, genuinely useful follow-up question. Make it specific to their data, not generic. Good: "Your sign_up → first_purchase funnel has a 12% drop at step 2 — want me to dig into what's happening there?" Bad: "What else would you like to know?"
+- If you notice something the user should investigate, mention it.`;
 
       // Build conversation messages
       const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
@@ -569,10 +645,10 @@ Keep responses focused and actionable. Use the data provided to give specific, d
 
       // Call OpenAI API
       const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini", // Using cost-effective model, can be changed to gpt-4 if needed
+        model: "gpt-4o-mini",
         messages,
-        temperature: 0.7,
-        max_tokens: 2000, // Increased to allow more detailed responses with comprehensive context
+        temperature: 0.5,
+        max_tokens: 3000,
       });
 
       const aiResponse =

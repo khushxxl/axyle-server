@@ -4,8 +4,19 @@
 
 import { Router, Request, Response } from "express";
 import { storage } from "../db";
+import { getPlanLimits } from "../config/plan-limits";
 
 const router = Router();
+
+function getCurrentMonthRange(): { startDate: string; endDate: string } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  return {
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+  };
+}
 
 /**
  * GET /api/v1/users/me
@@ -42,6 +53,79 @@ router.get("/me", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error getting user:", error);
+    res.status(500).json({
+      success: false,
+      error: "Internal server error",
+    });
+  }
+});
+
+/**
+ * GET /api/v1/users/me/usage
+ * Get current user's usage and plan limits (for settings / billing UI)
+ * Requires Supabase authentication
+ */
+router.get("/me/usage", async (req: Request, res: Response) => {
+  try {
+    const userId = req.supabaseUserId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: req.supabaseAuthError
+          ? `Authentication failed: ${req.supabaseAuthError}`
+          : "Authentication required",
+      });
+    }
+
+    const user = await storage.getOrCreateUser(userId);
+    const plan = user.subscription_plan || "free";
+    const limits = getPlanLimits(plan);
+
+    const projects = await storage.listProjects(userId);
+    const projectIds = projects.map((p: { id: string }) => p.id);
+
+    // Only count events for this user's projects; if they have none, usage is 0
+    let eventsThisMonth = 0;
+    if (projectIds.length > 0) {
+      const { startDate, endDate } = getCurrentMonthRange();
+      const globalStats = await storage.getGlobalEventStats(projectIds, {
+        startDate,
+        endDate,
+      });
+      eventsThisMonth = globalStats?.overview?.total_events ?? 0;
+    }
+
+    let maxTeamSeats = 0;
+    for (const p of projects) {
+      const count = await storage.getProjectTeamCount(p.id);
+      if (count > maxTeamSeats) maxTeamSeats = count;
+    }
+
+    const funnelsCount =
+      projectIds.length > 0
+        ? await storage.countFunnelsForProjectIds(projectIds)
+        : 0;
+
+    res.json({
+      success: true,
+      plan,
+      usage: {
+        eventsThisMonth,
+        projects: projects.length,
+        teamSeatsUsed: maxTeamSeats,
+        funnels: funnelsCount,
+      },
+      limits: {
+        eventsPerMonth: limits.eventsPerMonth,
+        projects: limits.projects,
+        teamSeatsPerProject: limits.teamSeatsPerProject,
+        funnels: limits.funnels,
+        dataRetentionDays: limits.dataRetentionDays,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting usage:", error);
     res.status(500).json({
       success: false,
       error: "Internal server error",

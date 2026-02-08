@@ -6,6 +6,7 @@ import { Router, Request, Response } from "express";
 import { storage } from "../db";
 import { randomUUID, randomBytes } from "crypto";
 import { apiKeyCreationRateLimiter } from "../middleware/rateLimiting";
+import { getPlanLimits, isUnlimited } from "../config/plan-limits";
 
 const router = Router();
 
@@ -36,6 +37,21 @@ router.post("/", async (req: Request, res: Response) => {
 
     // Use authenticated user_id if available, otherwise use provided userId or generate
     const projectUserId = req.supabaseUserId || userId || randomUUID();
+
+    // Enforce plan project limit
+    if (req.supabaseUserId) {
+      const user = await storage.getUser(req.supabaseUserId);
+      const limits = getPlanLimits(user?.subscription_plan);
+      if (!isUnlimited(limits.projects) && limits.projects >= 0) {
+        const existing = await storage.listProjects(req.supabaseUserId);
+        if (existing.length >= limits.projects) {
+          return res.status(402).json({
+            success: false,
+            error: `Project limit reached (${limits.projects} project${limits.projects === 1 ? "" : "s"} on your plan). Upgrade to add more.`,
+          });
+        }
+      }
+    }
 
     // Create project
     const project = await storage.createProject({

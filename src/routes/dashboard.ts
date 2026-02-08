@@ -14,6 +14,19 @@ const router = Router();
  */
 router.get("/events", async (req: Request, res: Response) => {
   try {
+    const userId = req.supabaseUserId;
+    const projects = await storage.listProjects(userId);
+    const projectMap = new Map(projects.map((p) => [p.id, p]));
+
+    // If authenticated and user has no projects, return empty (don't show other users' events)
+    if (userId && projects.length === 0) {
+      return res.json({
+        success: true,
+        events: [],
+        count: 0,
+      });
+    }
+
     const {
       limit = "100",
       offset = "0",
@@ -25,8 +38,6 @@ router.get("/events", async (req: Request, res: Response) => {
 
     const parsedLimit = parseInt(limit as string, 10);
     const parsedOffset = parseInt(offset as string, 10);
-    
-    console.log(`Fetching all events: limit=${parsedLimit}, offset=${parsedOffset}, projectId=${projectId}`);
 
     const events = await storage.getAllEvents({
       limit: parsedLimit,
@@ -36,11 +47,6 @@ router.get("/events", async (req: Request, res: Response) => {
       startDate: startDate as string | undefined,
       endDate: endDate as string | undefined,
     });
-
-    // Get project names for display - filter by authenticated user if available
-    const userId = req.supabaseUserId;
-    const projects = await storage.listProjects(userId);
-    const projectMap = new Map(projects.map((p) => [p.id, p]));
 
     // Filter events by user's projects if authenticated
     let filteredEvents = events;
@@ -289,6 +295,19 @@ router.get(
  */
 router.get("/events/stream", async (req: Request, res: Response) => {
   try {
+    const userId = req.supabaseUserId;
+    const projects = await storage.listProjects(userId);
+    const projectMap = new Map(projects.map((p) => [p.id, p]));
+
+    if (userId && projects.length === 0) {
+      return res.json({
+        success: true,
+        events: [],
+        count: 0,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const { since, projectId, limit = "50" } = req.query;
 
     const events = await storage.getRecentEvents({
@@ -296,11 +315,6 @@ router.get("/events/stream", async (req: Request, res: Response) => {
       projectId: projectId as string | undefined,
       limit: parseInt(limit as string, 10),
     });
-
-    // Get project names for display - filter by authenticated user if available
-    const userId = req.supabaseUserId;
-    const projects = await storage.listProjects(userId);
-    const projectMap = new Map(projects.map((p) => [p.id, p]));
 
     // Filter events by user's projects if authenticated
     let filteredEvents = events;

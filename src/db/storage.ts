@@ -170,6 +170,7 @@ export interface StorageAdapter {
   }): Promise<any>;
   getFunnel(id: string): Promise<any | null>;
   listFunnels(projectId: string): Promise<any[]>;
+  countFunnelsForProjectIds(projectIds: string[]): Promise<number>;
   updateFunnel(
     id: string,
     data: {
