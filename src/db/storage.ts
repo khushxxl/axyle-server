@@ -215,6 +215,7 @@ export interface StorageAdapter {
   isProjectOwner(projectId: string, userId: string): Promise<boolean>;
   canAddTeamMember(userId: string, projectId: string): Promise<boolean>;
   getProjectTeamCount(projectId: string): Promise<number>;
+  hasTeamMemberships(userId: string): Promise<boolean>;
 
   // Project invitations (invite by email; no account required)
   createInvitation(data: {

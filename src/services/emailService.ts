@@ -160,32 +160,34 @@ interface ProjectInviteEmailData {
 export async function sendProjectInviteEmail(
   data: ProjectInviteEmailData,
 ): Promise<void> {
-  try {
-    if (!process.env.RESEND_API_KEY) {
-      console.warn(
-        "RESEND_API_KEY not configured. Skipping project invite email.",
-      );
-      return;
-    }
-
-    const fromEmail =
-      process.env.RESEND_FROM_EMAIL || "onboarding@yourdomain.com";
-    const fromName = process.env.RESEND_FROM_NAME || "Axyle";
-
-    const resend = getResendClient();
-
-    await resend.emails.send({
-      from: `${fromName} <${fromEmail}>`,
-      to: data.email,
-      subject: `You're invited to join ${data.projectName}`,
-      html: getProjectInviteEmailHTML(data),
-    });
-
-    console.log(`Project invite email sent to ${data.email}`);
-  } catch (error) {
-    console.error("Error sending project invite email:", error);
-    throw error; // Caller may want to show "invite sent" even if email fails
+  if (!process.env.RESEND_API_KEY) {
+    console.warn(
+      "RESEND_API_KEY not configured. Skipping project invite email.",
+    );
+    return;
   }
+
+  const fromEmail =
+    process.env.RESEND_FROM_EMAIL || "onboarding@yourdomain.com";
+  const fromName = process.env.RESEND_FROM_NAME || "Axyle";
+
+  const resend = getResendClient();
+
+  console.log(`[Email] Sending invite to ${data.email} from ${fromName} <${fromEmail}>`);
+
+  const result = await resend.emails.send({
+    from: `${fromName} <${fromEmail}>`,
+    to: data.email,
+    subject: `You're invited to join ${data.projectName}`,
+    html: getProjectInviteEmailHTML(data),
+  });
+
+  if (result.error) {
+    console.error("[Email] Resend returned error:", result.error);
+    throw new Error(`Email delivery failed: ${result.error.message}`);
+  }
+
+  console.log(`[Email] Project invite email sent to ${data.email}, id: ${result.data?.id}`);
 }
 
 function getProjectInviteEmailHTML(data: ProjectInviteEmailData): string {

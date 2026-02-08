@@ -2425,6 +2425,18 @@ export class SupabaseStorage implements StorageAdapter {
     return data || 0;
   }
 
+  async hasTeamMemberships(userId: string): Promise<boolean> {
+    const { data, error } = await this.supabase
+      .from("project_team_members")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("role", "member")
+      .limit(1);
+
+    if (error) throw error;
+    return !!data && data.length > 0;
+  }
+
   // Project invitations
   async createInvitation(data: {
     projectId: string;

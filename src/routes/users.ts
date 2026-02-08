@@ -39,6 +39,9 @@ router.get("/me", async (req: Request, res: Response) => {
     // Get or create user (fallback if trigger didn't fire)
     const user = await storage.getOrCreateUser(userId);
 
+    // Check if user is a team member of any project (not as owner)
+    const isTeamMember = await storage.hasTeamMemberships(userId);
+
     res.json({
       success: true,
       user: {
@@ -47,6 +50,7 @@ router.get("/me", async (req: Request, res: Response) => {
         onboarding_completed: user.onboarding_completed,
         subscription_status: user.subscription_status,
         subscription_plan: user.subscription_plan,
+        isTeamMember,
         created_at: user.created_at,
         updated_at: user.updated_at,
       },

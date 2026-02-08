@@ -118,7 +118,7 @@ router.post("/:projectId/team-members", async (req: Request, res: Response) => {
       }
     }
 
-    // If invitee already has an account and is not a member, add them directly and send email
+    // Check if invitee is already a member (whether they have an account or not)
     const memberUser = await storage.getUserByEmail(email);
     if (memberUser) {
       const alreadyMember = await storage.isProjectMember(projectId, memberUser.id);
@@ -128,49 +128,14 @@ router.post("/:projectId/team-members", async (req: Request, res: Response) => {
           error: "This person is already a member of this project",
         });
       }
-      const canAdd = await storage.canAddTeamMember(userId, projectId);
-      if (!canAdd) {
-        return res.status(403).json({
-          success: false,
-          error: "Cannot add this team member.",
-        });
-      }
-      await storage.addTeamMember({
-        projectId,
-        userId: memberUser.id,
-        invitedBy: userId,
-      });
-      const acceptLink = `${WEB_URL}/dashboard/projects/${projectId}`;
-      try {
-        await emailService.sendProjectInviteEmail({
-          email,
-          projectName: project.name,
-          inviterName: (user as { name?: string }).name,
-          acceptLink,
-        });
-      } catch (e) {
-        console.error("Failed to send added email:", e);
-      }
-      const teamMembers = await storage.getProjectTeamMembers(projectId);
-      const teamMember = teamMembers.find((m) => m.user_id === memberUser.id);
-      return res.json({
-        success: true,
-        teamMember: teamMember || null,
-        message: "Team member added. They've been sent an email with a link to the project.",
-      });
     }
 
-    // Invitee does not have an account: create invitation and send invite email
+    // Always use pending invitation flow (for both existing and new users)
     const canAdd = await storage.canAddTeamMember(userId, projectId);
     if (!canAdd) {
-      const limits = {
-        free: "Free plan does not support team members",
-        pro: "Pro plan allows up to 3 additional team members (4 total including owner)",
-        business: "Business plan allows up to 10 additional team members (11 total including owner)",
-      };
       return res.status(403).json({
         success: false,
-        error: limits[user.subscription_plan as keyof typeof limits] || "Team member limit reached",
+        error: "Team member limit reached for your current plan. Upgrade to add more.",
         currentPlan: user.subscription_plan,
       });
     }
@@ -218,7 +183,9 @@ router.post("/:projectId/team-members", async (req: Request, res: Response) => {
 
     res.status(201).json({
       success: true,
-      message: "Invitation sent. They'll receive an email with a link to sign in or create an account and join the project.",
+      message: memberUser
+        ? "Invitation sent. They'll receive an email to accept and join the project."
+        : "Invitation sent. They'll receive an email with a link to sign up and join the project.",
       teamMember: null,
     });
   } catch (error) {
@@ -335,31 +302,28 @@ router.get("/:projectId/team-members/limits", async (req: Request, res: Response
       });
     }
 
-    const user = await storage.getUser(userId);
-    if (!user) {
+    // Use the project owner's plan for limit calculation
+    const project = await storage.getProject(projectId);
+    if (!project) {
       return res.status(404).json({
         success: false,
-        error: "User not found",
+        error: "Project not found",
       });
     }
+    const owner = await storage.getUser(project.user_id);
+    const ownerPlan = owner?.subscription_plan || "free";
 
     const currentCount = await storage.getProjectTeamCount(projectId);
-    const limits = {
-      free: { max: 1, additional: 0 },
-      pro: { max: 4, additional: 3 },
-      business: { max: 11, additional: 10 },
-    };
-
-    const planLimits = limits[user.subscription_plan as keyof typeof limits] || limits.free;
+    const planLimits = getPlanLimits(ownerPlan);
 
     res.json({
       success: true,
-      currentPlan: user.subscription_plan,
+      currentPlan: ownerPlan,
       currentCount,
-      maxMembers: planLimits.max,
-      additionalSeats: planLimits.additional,
-      canAddMore: currentCount < planLimits.max,
-      remainingSeats: Math.max(0, planLimits.max - currentCount),
+      maxMembers: planLimits.teamSeatsPerProject,
+      additionalSeats: Math.max(0, planLimits.teamSeatsPerProject - 1),
+      canAddMore: currentCount < planLimits.teamSeatsPerProject,
+      remainingSeats: Math.max(0, planLimits.teamSeatsPerProject - currentCount),
     });
   } catch (error) {
     console.error("Error getting team limits:", error);
