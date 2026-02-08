@@ -5,6 +5,11 @@
 
 import { Resend } from "resend";
 
+const WEB_URL = process.env.WEB_URL || "http://localhost:3000";
+const LOGO_URL =
+  process.env.EMAIL_LOGO_URL ||
+  "https://i.ibb.co/YBVWTyGH/Frame-2147259039-3.png";
+
 let resendInstance: Resend | null = null;
 
 function getResendClient(): Resend {
@@ -36,14 +41,14 @@ export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<void> {
 
     const fromEmail =
       process.env.RESEND_FROM_EMAIL || "onboarding@yourdomain.com";
-    const fromName = process.env.RESEND_FROM_NAME || "Your App";
+    const fromName = process.env.RESEND_FROM_NAME || "Axyle";
 
     const resend = getResendClient();
 
     await resend.emails.send({
       from: `${fromName} <${fromEmail}>`,
       to: data.email,
-      subject: "Welcome to Your App",
+      subject: "Welcome to Axyle",
       html: getWelcomeEmailHTML(data),
     });
 
@@ -59,6 +64,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<void> {
  */
 function getWelcomeEmailHTML(data: WelcomeEmailData): string {
   const displayName = data.name || "there";
+  const dashboardUrl = `${WEB_URL}/dashboard`;
 
   return `
 <!DOCTYPE html>
@@ -66,155 +72,70 @@ function getWelcomeEmailHTML(data: WelcomeEmailData): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to Your App</title>
+  <title>Welcome to Axyle</title>
+  <!--[if mso]>
+  <noscript>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding: 40px 24px; text-align: center; background: #0f0f12;"><img src="${LOGO_URL}" alt="Axyle" width="48" height="48" style="display: inline-block;" /></td></tr></table>
+  </noscript>
+  <![endif]-->
   <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background-color: #f4f4f5;
-    }
-    .container {
-      max-width: 600px;
-      margin: 0 auto;
-      background-color: #ffffff;
-    }
-    .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      padding: 40px 30px;
-      text-align: center;
-    }
-    .header h1 {
-      color: #ffffff;
-      font-size: 28px;
-      font-weight: 600;
-      margin: 0;
-      letter-spacing: -0.5px;
-    }
-    .content {
-      padding: 40px 30px;
-      color: #3f3f46;
-      line-height: 1.6;
-    }
-    .content h2 {
-      color: #18181b;
-      font-size: 20px;
-      font-weight: 600;
-      margin: 0 0 16px 0;
-    }
-    .content p {
-      margin: 0 0 16px 0;
-      font-size: 16px;
-    }
-    .feature-list {
-      margin: 24px 0;
-      padding: 0;
-      list-style: none;
-    }
-    .feature-list li {
-      padding: 12px 0;
-      border-bottom: 1px solid #e4e4e7;
-      font-size: 15px;
-    }
-    .feature-list li:last-child {
-      border-bottom: none;
-    }
-    .feature-list li strong {
-      color: #18181b;
-      font-weight: 600;
-    }
-    .button {
-      display: inline-block;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: #ffffff;
-      text-decoration: none;
-      padding: 14px 32px;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 600;
-      margin: 24px 0;
-      transition: opacity 0.2s;
-    }
-    .button:hover {
-      opacity: 0.9;
-    }
-    .footer {
-      background-color: #fafafa;
-      padding: 30px;
-      text-align: center;
-      border-top: 1px solid #e4e4e7;
-    }
-    .footer p {
-      color: #71717a;
-      font-size: 14px;
-      margin: 8px 0;
-    }
-    .footer a {
-      color: #667eea;
-      text-decoration: none;
-    }
+    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0f0f12; -webkit-font-smoothing: antialiased; }
+    .wrapper { background-color: #0f0f12; padding: 32px 16px; }
+    .container { max-width: 560px; margin: 0 auto; background-color: #18181b; border-radius: 16px; overflow: hidden; border: 1px solid #27272a; }
+    .header { padding: 40px 32px 32px; text-align: center; background: linear-gradient(180deg, #1a1a1f 0%, #18181b 100%); }
+    .logo { width: 56px; height: 56px; display: block; margin: 0 auto 20px; border-radius: 12px; }
+    .header h1 { color: #ffffff; font-size: 24px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em; }
+    .header .tagline { color: #a1a1aa; font-size: 14px; margin: 0; }
+    .content { padding: 0 32px 36px; color: #d4d4d8; line-height: 1.65; }
+    .content h2 { color: #ffffff; font-size: 18px; font-weight: 600; margin: 0 0 20px; }
+    .content p { margin: 0 0 18px; font-size: 15px; }
+    .feature-list { margin: 24px 0; padding: 0; list-style: none; }
+    .feature-list li { padding: 14px 0; border-bottom: 1px solid #27272a; font-size: 15px; color: #d4d4d8; }
+    .feature-list li:last-child { border-bottom: none; }
+    .feature-list strong { color: #ffffff; font-weight: 600; }
+    .feature-list .muted { color: #71717a; font-weight: 400; }
+    .button-wrap { text-align: center; margin: 28px 0; }
+    .button { display: inline-block; background: #ffffff; color: #0f0f12 !important; text-decoration: none; padding: 14px 28px; border-radius: 9999px; font-size: 15px; font-weight: 600; }
+    .footer { padding: 28px 32px; text-align: center; border-top: 1px solid #27272a; background: #0f0f12; }
+    .footer .logo-sm { width: 32px; height: 32px; border-radius: 8px; margin-bottom: 10px; vertical-align: middle; }
+    .footer p { color: #71717a; font-size: 13px; margin: 6px 0; }
+    .footer a { color: #a78bfa; text-decoration: none; }
     @media only screen and (max-width: 600px) {
-      .content {
-        padding: 30px 20px;
-      }
-      .header {
-        padding: 30px 20px;
-      }
-      .header h1 {
-        font-size: 24px;
-      }
+      .wrapper { padding: 20px 12px; }
+      .header, .content { padding-left: 24px; padding-right: 24px; }
+      .header h1 { font-size: 22px; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>Welcome to Your App</h1>
-    </div>
-    
-    <div class="content">
-      <h2>Hi ${displayName},</h2>
-      
-      <p>
-        Thanks for joining us. We're excited to have you on board and help you track, analyze, and grow your application.
-      </p>
-      
-      <p>
-        Here's what you can do with your new account:
-      </p>
-      
-      <ul class="feature-list">
-        <li><strong>Track Events:</strong> Monitor user interactions and behaviors in real-time</li>
-        <li><strong>Build Funnels:</strong> Understand your conversion paths and optimize them</li>
-        <li><strong>Create Segments:</strong> Group users based on behaviors and properties</li>
-        <li><strong>AI Insights:</strong> Get intelligent recommendations to improve your metrics</li>
-      </ul>
-      
-      <p>
-        Ready to get started? Head to your dashboard and begin exploring.
-      </p>
-      
-      <center>
-        <a href="${process.env.WEB_URL || "http://localhost:3000"}/dashboard" class="button">
-          Go to Dashboard
-        </a>
-      </center>
-      
-      <p>
-        If you have any questions or need help getting started, feel free to reach out to our support team.
-      </p>
-    </div>
-    
-    <div class="footer">
-      <p>
-        <strong>Your App</strong>
-      </p>
-      <p>
-        Track. Analyze. Grow.
-      </p>
-      <p style="margin-top: 16px;">
-        Need help? <a href="mailto:support@yourdomain.com">Contact Support</a>
-      </p>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <img src="${LOGO_URL}" alt="Axyle" class="logo" width="56" height="56" />
+        <h1 style="color: #ffffff;">Welcome to Axyle</h1>
+        <p class="tagline" style="color: #ffffff;">Track. Analyze. Grow.</p>
+      </div>
+      <div class="content">
+        <h2>Hi ${displayName},</h2>
+        <p>Thanks for signing up. We're excited to help you track, analyze, and grow your application.</p>
+        <p>Here's what you can do with Axyle:</p>
+        <ul class="feature-list">
+          <li><strong>Track events</strong> <span class="muted">— Monitor user interactions in real time</span></li>
+          <li><strong>Build funnels</strong> <span class="muted">— See conversion paths and drop-offs</span></li>
+          <li><strong>Create segments</strong> <span class="muted">— Group users by behavior and properties</span></li>
+          <li><strong>Ask AI</strong> <span class="muted">— Get insights in plain English</span></li>
+        </ul>
+        <p>Choose a plan on the pricing page, then head to your dashboard to start exploring.</p>
+        <div class="button-wrap">
+          <a href="${dashboardUrl}" class="button">Go to Dashboard</a>
+        </div>
+        <p style="font-size: 14px; color: #71717a;">If you have questions, reply to this email or check out our docs.</p>
+      </div>
+      <div class="footer">
+        <img src="${LOGO_URL}" alt="Axyle" class="logo-sm" width="32" height="32" />
+        <p><strong style="color: #d4d4d8;">Axyle</strong></p>
+        <p>Track. Analyze. Grow.</p>
+      </div>
     </div>
   </div>
 </body>
@@ -245,7 +166,7 @@ export async function sendProjectInviteEmail(
 
     const fromEmail =
       process.env.RESEND_FROM_EMAIL || "onboarding@yourdomain.com";
-    const fromName = process.env.RESEND_FROM_NAME || "Your App";
+    const fromName = process.env.RESEND_FROM_NAME || "Axyle";
 
     const resend = getResendClient();
 
@@ -272,33 +193,52 @@ function getProjectInviteEmailHTML(data: ProjectInviteEmailData): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Project invitation</title>
+  <title>You're invited to ${data.projectName}</title>
   <style>
-    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f4f4f5; }
-    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center; }
-    .header h1 { color: #ffffff; font-size: 24px; font-weight: 600; margin: 0; }
-    .content { padding: 40px 30px; color: #3f3f46; line-height: 1.6; }
-    .content h2 { color: #18181b; font-size: 18px; font-weight: 600; margin: 0 0 16px 0; }
-    .content p { margin: 0 0 16px 0; font-size: 16px; }
-    .button { display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff !important; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; margin: 24px 0; }
-    .footer { background-color: #fafafa; padding: 24px 30px; text-align: center; border-top: 1px solid #e4e4e7; }
-    .footer p { color: #71717a; font-size: 14px; margin: 8px 0; }
+    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0f0f12; -webkit-font-smoothing: antialiased; }
+    .wrapper { background-color: #0f0f12; padding: 32px 16px; }
+    .container { max-width: 560px; margin: 0 auto; background-color: #18181b; border-radius: 16px; overflow: hidden; border: 1px solid #27272a; }
+    .header { padding: 40px 32px 32px; text-align: center; background: linear-gradient(180deg, #1a1a1f 0%, #18181b 100%); }
+    .logo { width: 56px; height: 56px; display: block; margin: 0 auto 20px; border-radius: 12px; }
+    .header h1 { color: #ffffff; font-size: 24px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em; }
+    .header .tagline { color: #a1a1aa; font-size: 14px; margin: 0; }
+    .content { padding: 0 32px 36px; color: #d4d4d8; line-height: 1.65; }
+    .content h2 { color: #ffffff; font-size: 18px; font-weight: 600; margin: 0 0 20px; }
+    .content p { margin: 0 0 18px; font-size: 15px; }
+    .button-wrap { text-align: center; margin: 28px 0; }
+    .button { display: inline-block; background: #ffffff; color: #0f0f12 !important; text-decoration: none; padding: 14px 28px; border-radius: 9999px; font-size: 15px; font-weight: 600; }
+    .footer { padding: 28px 32px; text-align: center; border-top: 1px solid #27272a; background: #0f0f12; }
+    .footer .logo-sm { width: 32px; height: 32px; border-radius: 8px; margin-bottom: 10px; vertical-align: middle; }
+    .footer p { color: #71717a; font-size: 13px; margin: 6px 0; }
+    @media only screen and (max-width: 600px) {
+      .wrapper { padding: 20px 12px; }
+      .header, .content { padding-left: 24px; padding-right: 24px; }
+      .header h1 { font-size: 22px; }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header"><h1>You're invited</h1></div>
-    <div class="content">
-      <h2>Hi there,</h2>
-      <p><strong>${inviter}</strong> has invited you to collaborate on the project <strong>${data.projectName}</strong>.</p>
-      <p>Click the button below to accept the invitation. You'll sign in or create an account, then you'll be added to the project.</p>
-      <p><a href="${data.acceptLink}" class="button">Accept invitation</a></p>
-      <p style="font-size: 14px; color: #71717a;">If you didn't expect this invite, you can ignore this email.</p>
-    </div>
-    <div class="footer">
-      <p><strong>Your App</strong></p>
-      <p>Track. Analyze. Grow.</p>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <img src="${LOGO_URL}" alt="Axyle" class="logo" width="56" height="56" />
+        <h1>You're invited</h1>
+        <p class="tagline">Track. Analyze. Grow.</p>
+      </div>
+      <div class="content">
+        <h2>Hi there,</h2>
+        <p><strong style="color: #ffffff;">${inviter}</strong> has invited you to collaborate on the project <strong style="color: #ffffff;">${data.projectName}</strong> on Axyle.</p>
+        <p>Click the button below to accept. You'll sign in or create an account, then you'll be added to the project.</p>
+        <div class="button-wrap">
+          <a href="${data.acceptLink}" class="button">Accept invitation</a>
+        </div>
+        <p style="font-size: 14px; color: #71717a;">If you didn't expect this invite, you can ignore this email.</p>
+      </div>
+      <div class="footer">
+        <img src="${LOGO_URL}" alt="Axyle" class="logo-sm" width="32" height="32" />
+        <p><strong style="color: #d4d4d8;">Axyle</strong></p>
+        <p>Track. Analyze. Grow.</p>
+      </div>
     </div>
   </div>
 </body>
