@@ -11,9 +11,15 @@ import {
   getRevenueSummary,
   validateCredentials,
   getAvailableMetricIds,
+  registerWebhook,
+  deleteWebhook,
   RevenueCatConfig,
 } from "../services/revenuecatService";
 import { encrypt, decrypt } from "../utils/encryption";
+import { sendPaymentNotification } from "../services/slackService";
+import broadcaster from "../services/eventBroadcaster";
+
+const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:8000";
 
 const router = Router();
 
@@ -104,11 +110,33 @@ router.put("/:projectId/revenuecat/config", async (req: Request, res: Response) 
     // Encrypt the secret key before storing (we never store plain keys)
     const encryptedSecretKey = secretKey ? encrypt(secretKey) : null;
 
+    // Auto-register our webhook endpoint with RevenueCat
+    let webhookIntegrationId: string | null = null;
+    if (enabled && secretKey && revenuecatProjectId) {
+      const webhookUrl = `${API_BASE_URL}/api/v1/projects/${projectId}/revenuecat/webhooks`;
+      const result = await registerWebhook(
+        { secretKey, projectId: revenuecatProjectId },
+        webhookUrl,
+        project.name || "App"
+      );
+      if ("id" in result) {
+        webhookIntegrationId = result.id;
+        console.log(
+          `Registered RevenueCat webhook ${result.id} for project ${projectId}`
+        );
+      } else {
+        console.warn(
+          `Failed to auto-register webhook: ${result.error}. Continuing without webhook.`
+        );
+      }
+    }
+
     // Update project with RevenueCat config
     await storage.updateProjectRevenueCatConfig(projectId, {
       revenuecat_secret_key: encryptedSecretKey,
       revenuecat_project_id: revenuecatProjectId || null,
       revenuecat_enabled: enabled,
+      revenuecat_webhook_integration_id: webhookIntegrationId,
     });
 
     res.json({
@@ -119,7 +147,7 @@ router.put("/:projectId/revenuecat/config", async (req: Request, res: Response) 
       config: {
         enabled,
         projectId: revenuecatProjectId,
-        // Don't return the secret key
+        webhookRegistered: !!webhookIntegrationId,
       },
     });
   } catch (error) {
@@ -184,10 +212,31 @@ router.delete(
         });
       }
 
+      // Delete the webhook from RevenueCat if we registered one
+      if (
+        project.revenuecat_webhook_integration_id &&
+        project.revenuecat_secret_key &&
+        project.revenuecat_project_id
+      ) {
+        try {
+          const decryptedKey = decrypt(project.revenuecat_secret_key);
+          await deleteWebhook(
+            { secretKey: decryptedKey, projectId: project.revenuecat_project_id },
+            project.revenuecat_webhook_integration_id
+          );
+          console.log(
+            `Deleted RevenueCat webhook ${project.revenuecat_webhook_integration_id} for project ${projectId}`
+          );
+        } catch (e) {
+          console.warn("Failed to delete RevenueCat webhook:", e);
+        }
+      }
+
       await storage.updateProjectRevenueCatConfig(projectId, {
         revenuecat_secret_key: null,
         revenuecat_project_id: null,
         revenuecat_enabled: false,
+        revenuecat_webhook_integration_id: null,
       });
 
       res.json({
@@ -341,23 +390,47 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const { projectId } = req.params;
-      const event = req.body;
+      const payload = req.body;
 
       console.log("Received RevenueCat webhook:", {
         projectId,
-        type: event.event?.type,
+        type: payload.event?.type,
         timestamp: new Date().toISOString(),
       });
 
-      // Acknowledge receipt immediately
+      // Acknowledge receipt immediately (RevenueCat disconnects after 60s)
       res.status(200).send("OK");
 
-      // TODO: Process the webhook event
-      // You could:
-      // - Store the event in database
-      // - Trigger analytics updates
-      // - Send notifications
-      // - Update subscription status
+      if (payload.event?.type) {
+        const eventData = {
+          type: payload.event.type,
+          app_user_id: payload.event.app_user_id,
+          product_id: payload.event.product_id,
+          price_in_purchased_currency:
+            payload.event.price_in_purchased_currency,
+          currency: payload.event.currency,
+          store: payload.event.store,
+          country_code: payload.event.country_code,
+        };
+
+        // Broadcast to SSE clients for real-time toast
+        broadcaster.emit(`payment:${projectId}`, eventData);
+
+        // Fire-and-forget: Slack payment notification
+        try {
+          const project = await storage.getProject(projectId);
+          if (
+            project?.slack_enabled &&
+            project.slack_notify_payments &&
+            project.slack_webhook_url
+          ) {
+            const webhookUrl = decrypt(project.slack_webhook_url);
+            sendPaymentNotification(webhookUrl, eventData);
+          }
+        } catch (e) {
+          console.error("Slack payment notification error:", e);
+        }
+      }
     } catch (error) {
       console.error("Webhook processing error:", error);
       res.status(200).send("Error logged");

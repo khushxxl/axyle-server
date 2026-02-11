@@ -9,6 +9,8 @@ import { insertEventsBatch, updateProjectStats, validateEvent } from '../service
 import { storage } from '../db';
 import { EventsRequest, EventsResponse } from '../types';
 import { getPlanLimits, isUnlimited } from '../config/plan-limits';
+import { sendCrashNotification, sendQuotaWarning } from '../services/slackService';
+import { decrypt } from '../utils/encryption';
 
 const router = Router();
 
@@ -67,9 +69,12 @@ router.post(
         try {
           // Enforce plan event limit (per account / billing owner)
           const project = await storage.getProject(projectId);
+          let owner: any = null;
+          let limits = getPlanLimits(undefined);
+          let currentMonthEvents = 0;
           if (project?.user_id) {
-            const owner = await storage.getUser(project.user_id);
-            const limits = getPlanLimits(owner?.subscription_plan);
+            owner = await storage.getUser(project.user_id);
+            limits = getPlanLimits(owner?.subscription_plan);
             if (!isUnlimited(limits.eventsPerMonth)) {
               const ownerProjects = await storage.listProjects(project.user_id);
               const ownerProjectIds = ownerProjects.map((p: { id: string }) => p.id);
@@ -78,8 +83,8 @@ router.post(
                 startDate,
                 endDate,
               });
-              const currentMonthEvents = stats?.overview?.total_events ?? 0;
-              if (currentMonthEvents + validEvents.length > limits.eventsPerMonth) {
+              currentMonthEvents = (stats?.overview?.total_events ?? 0) + validEvents.length;
+              if (currentMonthEvents > limits.eventsPerMonth) {
                 return res.status(402).json({
                   success: false,
                   received: events.length,
@@ -96,6 +101,59 @@ router.post(
           await insertEventsBatch(storage, validEvents, projectId);
           await updateProjectStats(storage, projectId, validEvents.length);
           console.log(`✅ Successfully stored ${validEvents.length} events`);
+
+          // Fire-and-forget: Slack crash notifications
+          if (project?.slack_enabled && project.slack_notify_crashes && project.slack_webhook_url) {
+            const crashPatterns = ['app_crash', 'crash', 'error', 'anr', 'fatal_error', 'unhandled_exception', 'exception'];
+            const crashEvents = validEvents.filter((e) => {
+              const eName = (e.name || '').toLowerCase();
+              return crashPatterns.some((p) => eName.includes(p));
+            });
+            if (crashEvents.length > 0) {
+              try {
+                const webhookUrl = decrypt(project.slack_webhook_url);
+                const seen = new Set<string>();
+                for (const ce of crashEvents) {
+                  const eName = ce.name || 'unknown_crash';
+                  if (seen.has(eName)) continue;
+                  seen.add(eName);
+                  const count = crashEvents.filter((e) => e.name === eName).length;
+                  sendCrashNotification(webhookUrl, {
+                    eventName: eName,
+                    userId: ce.userId || ce.anonymousId,
+                    deviceInfo: ce.context?.device?.model || ce.context?.os?.name,
+                    projectName: project.name,
+                    count,
+                  });
+                }
+              } catch (e) {
+                console.error('Slack crash notification decrypt error:', e);
+              }
+            }
+          }
+
+          // Fire-and-forget: Slack quota warnings
+          if (
+            project?.slack_enabled &&
+            project.slack_notify_quota &&
+            project.slack_webhook_url &&
+            owner &&
+            !isUnlimited(limits.eventsPerMonth) &&
+            currentMonthEvents > 0
+          ) {
+            const prevUsage = currentMonthEvents - validEvents.length;
+            const threshold80 = limits.eventsPerMonth * 0.8;
+            const crossed80 = prevUsage < threshold80 && currentMonthEvents >= threshold80;
+            const crossed100 = prevUsage < limits.eventsPerMonth && currentMonthEvents >= limits.eventsPerMonth;
+            if (crossed80 || crossed100) {
+              try {
+                const webhookUrl = decrypt(project.slack_webhook_url);
+                sendQuotaWarning(webhookUrl, project.name || projectId, currentMonthEvents, limits.eventsPerMonth);
+              } catch (e) {
+                console.error('Slack quota warning decrypt error:', e);
+              }
+            }
+          }
         } catch (dbError) {
           console.error('❌ Database error:', dbError);
           return res.status(500).json({

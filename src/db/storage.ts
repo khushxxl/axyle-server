@@ -249,6 +249,19 @@ export interface StorageAdapter {
       revenuecat_secret_key: string | null;
       revenuecat_project_id: string | null;
       revenuecat_enabled: boolean;
+      revenuecat_webhook_integration_id?: string | null;
+    }
+  ): Promise<void>;
+
+  // Slack Integration
+  updateProjectSlackConfig(
+    projectId: string,
+    config: {
+      slack_webhook_url: string | null;
+      slack_enabled: boolean;
+      slack_notify_payments: boolean;
+      slack_notify_crashes: boolean;
+      slack_notify_quota: boolean;
     }
   ): Promise<void>;
 }

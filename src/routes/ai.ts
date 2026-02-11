@@ -376,15 +376,6 @@ ${eventNames.slice(0, 50).join(", ")}${eventNames.length > 50 ? "..." : ""}`);
       const timezoneDistribution: Record<string, number> = {};
 
       if (recentEvents && recentEvents.length > 0) {
-        // Debug: log a sample event to verify locale/timezone fields
-        const sample = recentEvents[0];
-        console.log("[AI] Sample event fields:", {
-          locale: sample.locale,
-          timezone: sample.timezone,
-          contextType: typeof sample.context,
-          contextLocale: typeof sample.context === "object" ? sample.context?.locale : "string-context",
-        });
-
         recentEvents.forEach((event: any) => {
           // Parse context if needed (Supabase JSONB returns object, but handle string too)
           let ctx: any = {};
@@ -456,7 +447,7 @@ ${eventNames.slice(0, 50).join(", ")}${eventNames.length > 50 ? "..." : ""}`);
 
         contextSections.push(countryText);
       } else if (recentEvents && recentEvents.length > 0) {
-        // Fallback: show raw locale/timezone data even if country extraction failed
+        // Fallback: show raw locale/timezone data if available but no country could be extracted
         const topLocales = Object.entries(localeDistribution)
           .sort(([, a], [, b]) => b - a)
           .slice(0, 10);
@@ -464,18 +455,20 @@ ${eventNames.slice(0, 50).join(", ")}${eventNames.length > 50 ? "..." : ""}`);
           .sort(([, a], [, b]) => b - a)
           .slice(0, 10);
 
-        let locText = `## User Location Data\n`;
-        locText += `${recentEvents.length} events analyzed.\n`;
-        if (topLocales.length > 0) {
-          locText += `**Locales:** ${topLocales.map(([l, c]) => `${l} (${c} events)`).join(", ")}\n`;
+        // Only add a location section if we actually have some data
+        if (topLocales.length > 0 || topTimezones.length > 0) {
+          let locText = `## User Location Data\n`;
+          locText += `${recentEvents.length} events analyzed.\n`;
+          if (topLocales.length > 0) {
+            locText += `**Locales:** ${topLocales.map(([l, c]) => `${l} (${c} events)`).join(", ")}\n`;
+          }
+          if (topTimezones.length > 0) {
+            locText += `**Timezones:** ${topTimezones.map(([t, c]) => `${t} (${c} events)`).join(", ")}\n`;
+          }
+          contextSections.push(locText);
         }
-        if (topTimezones.length > 0) {
-          locText += `**Timezones:** ${topTimezones.map(([t, c]) => `${t} (${c} events)`).join(", ")}\n`;
-        }
-        if (topLocales.length === 0 && topTimezones.length === 0) {
-          locText += `No locale or timezone data found in events.\n`;
-        }
-        contextSections.push(locText);
+        // If no locale/timezone data at all, omit the section entirely —
+        // the AI will naturally say it doesn't have geographic data.
       }
 
       // Event Trends - Daily breakdown for last 7 days

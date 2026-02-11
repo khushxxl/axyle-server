@@ -23,6 +23,8 @@ import aiRouter from "./routes/ai";
 import webhooksRouter from "./routes/webhooks";
 import teamMembersRouter from "./routes/team-members";
 import revenuecatRouter from "./routes/revenuecat";
+import slackRouter from "./routes/slack";
+import sseRouter from "./routes/sse";
 import inviteRouter from "./routes/invite";
 import emailsRouter from "./routes/emails";
 
@@ -56,7 +58,7 @@ app.use(
 // Additional security headers for sensitive endpoints
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
   // Prevent caching of sensitive responses
-  if (req.path.includes("/api-keys") || req.path.includes("/revenuecat")) {
+  if (req.path.includes("/api-keys") || req.path.includes("/revenuecat") || req.path.includes("/slack")) {
     res.setHeader(
       "Cache-Control",
       "no-store, no-cache, must-revalidate, private"
@@ -116,6 +118,8 @@ app.use("/api/v1/ai", aiRouter); // AI assistant
 app.use("/api/v1/webhooks", webhooksRouter); // Webhooks (new user, etc.)
 app.use("/api/v1/projects", teamMembersRouter); // Team members
 app.use("/api/v1/projects", revenuecatRouter); // RevenueCat integration
+app.use("/api/v1/projects", slackRouter); // Slack integration
+app.use("/api/v1/projects", sseRouter); // SSE real-time events
 app.use("/api/v1/invite", inviteRouter); // Project invite accept
 app.use("/api/v1/emails", emailsRouter);
 
