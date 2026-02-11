@@ -988,50 +988,24 @@ export class SupabaseStorage implements StorageAdapter {
     projectIds?: string[],
     filters?: { startDate?: string; endDate?: string }
   ): Promise<any> {
-    // If date filters are provided, use fallback method
-    if (filters?.startDate || filters?.endDate) {
-      return this.getAverageSessionTimeFallback(projectIds, filters);
-    }
-
-    // Use database function for efficient calculation
-    const { data, error } = await this.supabase.rpc(
-      "get_average_session_time",
-      {
-        project_ids: projectIds && projectIds.length > 0 ? projectIds : null,
-      }
-    );
-
-    if (error) {
-      console.warn(
-        "Database function not available, using fallback:",
-        error.message
-      );
-      return this.getAverageSessionTimeFallback(projectIds, filters);
-    }
-
-    return data || { average_duration_ms: 0, average_duration_seconds: 0 };
+    return this.getAverageSessionTimeFallback(projectIds, filters);
   }
 
   private async getAverageSessionTimeFallback(
     projectIds?: string[],
     filters?: { startDate?: string; endDate?: string }
   ): Promise<any> {
-    let startTimestamp: number;
-
-    if (filters?.startDate) {
-      const startDate = new Date(filters.startDate);
-      startTimestamp = Math.floor(startDate.getTime() / 1000) * 1000;
-    } else {
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      startTimestamp = Math.floor(sevenDaysAgo.getTime() / 1000) * 1000;
-    }
-
     let query = this.supabase
       .from("sessions")
       .select("duration_ms")
       .not("duration_ms", "is", null)
-      .gt("duration_ms", 0)
-      .gte("start_time", startTimestamp.toString());
+      .gt("duration_ms", 0);
+
+    if (filters?.startDate) {
+      const startDate = new Date(filters.startDate);
+      const startTimestamp = Math.floor(startDate.getTime() / 1000) * 1000;
+      query = query.gte("start_time", startTimestamp.toString());
+    }
 
     if (filters?.endDate) {
       const endDate = new Date(filters.endDate);

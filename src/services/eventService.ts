@@ -4,6 +4,7 @@
 
 import { StorageAdapter } from '../db/storage';
 import { AnalyticsEvent } from '../types';
+import { emitProjectEvent } from './eventBus';
 
 /**
  * Insert events batch into database
@@ -15,6 +16,21 @@ export async function insertEventsBatch(
 ): Promise<void> {
   if (events.length === 0) return;
   await storage.insertEvents(events, projectId);
+
+  // Broadcast each event for real-time SSE listeners
+  for (const event of events) {
+    emitProjectEvent({
+      projectId,
+      type: "event",
+      data: {
+        eventName: event.name,
+        timestamp: event.timestamp,
+        userId: event.userId,
+        anonymousId: event.anonymousId,
+        sessionId: event.sessionId,
+      },
+    });
+  }
 }
 
 /**

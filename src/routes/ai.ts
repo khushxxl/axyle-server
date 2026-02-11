@@ -14,7 +14,9 @@ const router = Router();
  * Parse a user message for date range intent (e.g. "last 30 days", "past 2 weeks", "this month")
  * Returns { days, label } or null if no date range detected
  */
-function parseDateRangeFromMessage(message: string): { days: number; label: string } | null {
+function parseDateRangeFromMessage(
+  message: string,
+): { days: number; label: string } | null {
   const msg = message.toLowerCase();
 
   // "last/past N days"
@@ -28,14 +30,20 @@ function parseDateRangeFromMessage(message: string): { days: number; label: stri
   const weeksMatch = msg.match(/(?:last|past|previous)\s+(\d+)\s*weeks?/);
   if (weeksMatch) {
     const weeks = Math.min(parseInt(weeksMatch[1], 10), 52);
-    return { days: weeks * 7, label: `last ${weeks} week${weeks > 1 ? "s" : ""}` };
+    return {
+      days: weeks * 7,
+      label: `last ${weeks} week${weeks > 1 ? "s" : ""}`,
+    };
   }
 
   // "last/past N months"
   const monthsMatch = msg.match(/(?:last|past|previous)\s+(\d+)\s*months?/);
   if (monthsMatch) {
     const months = Math.min(parseInt(monthsMatch[1], 10), 12);
-    return { days: months * 30, label: `last ${months} month${months > 1 ? "s" : ""}` };
+    return {
+      days: months * 30,
+      label: `last ${months} month${months > 1 ? "s" : ""}`,
+    };
   }
 
   // "this week" / "this month" / "this year"
@@ -44,11 +52,14 @@ function parseDateRangeFromMessage(message: string): { days: number; label: stri
   if (/\bthis\s+year\b/.test(msg)) return { days: 365, label: "this year" };
 
   // "last week" / "last month" (without a number)
-  if (/\blast\s+week\b/.test(msg) && !daysMatch && !weeksMatch) return { days: 7, label: "last week" };
-  if (/\blast\s+month\b/.test(msg) && !monthsMatch) return { days: 30, label: "last month" };
+  if (/\blast\s+week\b/.test(msg) && !daysMatch && !weeksMatch)
+    return { days: 7, label: "last week" };
+  if (/\blast\s+month\b/.test(msg) && !monthsMatch)
+    return { days: 30, label: "last month" };
 
   // "past year" / "last year"
-  if (/(?:last|past)\s+year\b/.test(msg)) return { days: 365, label: "last year" };
+  if (/(?:last|past)\s+year\b/.test(msg))
+    return { days: 365, label: "last year" };
 
   // "today"
   if (/\btoday\b/.test(msg)) return { days: 1, label: "today" };
@@ -163,7 +174,7 @@ router.post(
         // Fetch funnels for selected project(s)
         projectIds && projectIds.length > 0
           ? Promise.all(
-              projectIds.map((pid) => storage.listFunnels(pid).catch(() => []))
+              projectIds.map((pid) => storage.listFunnels(pid).catch(() => [])),
             ).then((results) => results.flat())
           : Promise.resolve([]),
         // Fetch flows analytics for selected project(s)
@@ -177,8 +188,8 @@ router.post(
                   total_completions: 0,
                   total_abandonments: 0,
                   overall_completion_rate: 0,
-                }))
-              )
+                })),
+              ),
             )
           : Promise.resolve([]),
         // Fetch segments for selected project(s)
@@ -186,7 +197,7 @@ router.post(
           ? storage
               .listSegments()
               .then((segments) =>
-                segments.filter((s: any) => projectIds!.includes(s.project_id))
+                segments.filter((s: any) => projectIds!.includes(s.project_id)),
               )
               .catch(() => [])
           : Promise.resolve([]),
@@ -205,8 +216,8 @@ router.post(
                       limit: eventLimit,
                       projectId: pid,
                     })
-                    .catch(() => [])
-                )
+                    .catch(() => []),
+                ),
               ).then((results) => results.flat())
             : storage
                 .getAllEvents({
@@ -236,7 +247,7 @@ ${projects
     (p) =>
       `- **${p.name}** (${p.environment}): ${(
         p.total_events || 0
-      ).toLocaleString()} events`
+      ).toLocaleString()} events`,
   )
   .join("\n")}`);
       } else {
@@ -263,7 +274,7 @@ ${stats.topEvents
   .slice(0, 15)
   .map(
     (e: any, i: number) =>
-      `${i + 1}. **${e.event_name}**: ${e.count.toLocaleString()} occurrences`
+      `${i + 1}. **${e.event_name}**: ${e.count.toLocaleString()} occurrences`,
   )
   .join("\n")}`);
       }
@@ -330,7 +341,7 @@ ${eventNames.slice(0, 50).join(", ")}${eventNames.length > 50 ? "..." : ""}`);
               flowsText += `- **${flow.flow_type}** (${flow.flow_id}): ${
                 flow.total_starts
               } starts, ${(flow.completion_rate * 100).toFixed(
-                1
+                1,
               )}% completion rate\n`;
             });
           }
@@ -359,7 +370,9 @@ ${eventNames.slice(0, 50).join(", ")}${eventNames.length > 50 ? "..." : ""}`);
       }
 
       // Extract country from locale string (e.g., "en-GB" -> "GB", "fr-FR" -> "FR")
-      const getCountryFromLocale = (locale: string | null | undefined): string | null => {
+      const getCountryFromLocale = (
+        locale: string | null | undefined,
+      ): string | null => {
         if (!locale) return null;
         const parts = String(locale).split(/[-_]/);
         if (parts.length >= 2) {
@@ -376,11 +389,27 @@ ${eventNames.slice(0, 50).join(", ")}${eventNames.length > 50 ? "..." : ""}`);
       const timezoneDistribution: Record<string, number> = {};
 
       if (recentEvents && recentEvents.length > 0) {
+        // Debug: log a sample event to verify locale/timezone fields
+        const sample = recentEvents[0];
+        console.log("[AI] Sample event fields:", {
+          locale: sample.locale,
+          timezone: sample.timezone,
+          contextType: typeof sample.context,
+          contextLocale:
+            typeof sample.context === "object"
+              ? sample.context?.locale
+              : "string-context",
+        });
+
         recentEvents.forEach((event: any) => {
           // Parse context if needed (Supabase JSONB returns object, but handle string too)
           let ctx: any = {};
           if (typeof event.context === "string") {
-            try { ctx = JSON.parse(event.context); } catch { ctx = {}; }
+            try {
+              ctx = JSON.parse(event.context);
+            } catch {
+              ctx = {};
+            }
           } else if (event.context && typeof event.context === "object") {
             ctx = event.context;
           }
@@ -395,7 +424,8 @@ ${eventNames.slice(0, 50).join(", ")}${eventNames.length > 50 ? "..." : ""}`);
           }
           // Track timezone distribution
           if (timezone) {
-            timezoneDistribution[timezone] = (timezoneDistribution[timezone] || 0) + 1;
+            timezoneDistribution[timezone] =
+              (timezoneDistribution[timezone] || 0) + 1;
           }
 
           // Extract country from locale
@@ -668,7 +698,7 @@ Rules:
         error: "Failed to process AI request",
       });
     }
-  }
+  },
 );
 
 export default router;

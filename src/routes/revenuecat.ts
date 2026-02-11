@@ -16,18 +16,17 @@ import {
   RevenueCatConfig,
 } from "../services/revenuecatService";
 import { encrypt, decrypt } from "../utils/encryption";
-import { sendPaymentNotification } from "../services/slackService";
-import broadcaster from "../services/eventBroadcaster";
-
-const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:8000";
+import { emitProjectEvent } from "../services/eventBus";
 
 const router = Router();
+
+const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:8000";
 
 /**
  * Helper to get RevenueCat config from project
  */
 async function getProjectRevenueCatConfig(
-  projectId: string
+  projectId: string,
 ): Promise<{ config: RevenueCatConfig | null; project: any; error?: string }> {
   const project = await storage.getProject(projectId);
 
@@ -77,121 +76,105 @@ async function getProjectRevenueCatConfig(
  * PUT /api/v1/projects/:projectId/revenuecat/config
  * Configure RevenueCat integration for a project
  */
-router.put("/:projectId/revenuecat/config", async (req: Request, res: Response) => {
-  try {
-    const { projectId } = req.params;
-    const { secretKey, revenuecatProjectId, enabled = true } = req.body;
+router.put(
+  "/:projectId/revenuecat/config",
+  async (req: Request, res: Response) => {
+    try {
+      const { projectId } = req.params;
+      const { secretKey, revenuecatProjectId, enabled = true } = req.body;
 
-    // Verify project exists
-    const project = await storage.getProject(projectId);
+      // Verify project exists
+      const project = await storage.getProject(projectId);
 
-    if (!project) {
-      return res.status(404).json({
-        success: false,
-        error: "Project not found",
-      });
-    }
-
-    // If enabling, validate credentials
-    if (enabled && secretKey && revenuecatProjectId) {
-      const validation = await validateCredentials({
-        secretKey,
-        projectId: revenuecatProjectId,
-      });
-
-      if (!validation.valid) {
-        return res.status(400).json({
+      if (!project) {
+        return res.status(404).json({
           success: false,
-          error: `Invalid RevenueCat credentials: ${validation.error}`,
+          error: "Project not found",
         });
       }
-    }
 
-    // Encrypt the secret key before storing (we never store plain keys)
-    const encryptedSecretKey = secretKey ? encrypt(secretKey) : null;
+      // If enabling, validate credentials
+      if (enabled && secretKey && revenuecatProjectId) {
+        const validation = await validateCredentials({
+          secretKey,
+          projectId: revenuecatProjectId,
+        });
 
-    // Auto-register our webhook endpoint with RevenueCat
-    let webhookIntegrationId: string | null = null;
-    if (enabled && secretKey && revenuecatProjectId) {
-      const webhookUrl = `${API_BASE_URL}/api/v1/projects/${projectId}/revenuecat/webhooks`;
-      const result = await registerWebhook(
-        { secretKey, projectId: revenuecatProjectId },
-        webhookUrl,
-        project.name || "App"
-      );
-      if ("id" in result) {
-        webhookIntegrationId = result.id;
-        console.log(
-          `Registered RevenueCat webhook ${result.id} for project ${projectId}`
-        );
-      } else {
-        console.warn(
-          `Failed to auto-register webhook: ${result.error}. Continuing without webhook.`
-        );
+        if (!validation.valid) {
+          return res.status(400).json({
+            success: false,
+            error: `Invalid RevenueCat credentials: ${validation.error}`,
+          });
+        }
       }
+
+      // Encrypt the secret key before storing (we never store plain keys)
+      const encryptedSecretKey = secretKey ? encrypt(secretKey) : null;
+
+      // Update project with RevenueCat config
+      await storage.updateProjectRevenueCatConfig(projectId, {
+        revenuecat_secret_key: encryptedSecretKey,
+        revenuecat_project_id: revenuecatProjectId || null,
+        revenuecat_enabled: enabled,
+      });
+
+      res.json({
+        success: true,
+        message: enabled
+          ? "RevenueCat integration configured successfully"
+          : "RevenueCat integration disabled",
+        config: {
+          enabled,
+          projectId: revenuecatProjectId,
+          // Don't return the secret key
+        },
+      });
+    } catch (error) {
+      console.error("Error configuring RevenueCat:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to configure RevenueCat integration",
+      });
     }
-
-    // Update project with RevenueCat config
-    await storage.updateProjectRevenueCatConfig(projectId, {
-      revenuecat_secret_key: encryptedSecretKey,
-      revenuecat_project_id: revenuecatProjectId || null,
-      revenuecat_enabled: enabled,
-      revenuecat_webhook_integration_id: webhookIntegrationId,
-    });
-
-    res.json({
-      success: true,
-      message: enabled
-        ? "RevenueCat integration configured successfully"
-        : "RevenueCat integration disabled",
-      config: {
-        enabled,
-        projectId: revenuecatProjectId,
-        webhookRegistered: !!webhookIntegrationId,
-      },
-    });
-  } catch (error) {
-    console.error("Error configuring RevenueCat:", error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to configure RevenueCat integration",
-    });
-  }
-});
+  },
+);
 
 /**
  * GET /api/v1/projects/:projectId/revenuecat/config
  * Get RevenueCat configuration status (not the actual credentials)
  */
-router.get("/:projectId/revenuecat/config", async (req: Request, res: Response) => {
-  try {
-    const { projectId } = req.params;
+router.get(
+  "/:projectId/revenuecat/config",
+  async (req: Request, res: Response) => {
+    try {
+      const { projectId } = req.params;
 
-    const project = await storage.getProject(projectId);
+      const project = await storage.getProject(projectId);
 
-    if (!project) {
-      return res.status(404).json({
+      if (!project) {
+        return res.status(404).json({
+          success: false,
+          error: "Project not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        config: {
+          enabled: project.revenuecat_enabled || false,
+          hasSecretKey: !!project.revenuecat_secret_key,
+          revenuecatProjectId: project.revenuecat_project_id || null,
+        },
+      });
+    } catch (error) {
+      console.error("Error getting RevenueCat config:", error);
+      res.status(500).json({
         success: false,
-        error: "Project not found",
+        error: "Failed to get RevenueCat configuration",
       });
     }
-
-    res.json({
-      success: true,
-      config: {
-        enabled: project.revenuecat_enabled || false,
-        hasSecretKey: !!project.revenuecat_secret_key,
-        revenuecatProjectId: project.revenuecat_project_id || null,
-      },
-    });
-  } catch (error) {
-    console.error("Error getting RevenueCat config:", error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to get RevenueCat configuration",
-    });
-  }
-});
+  },
+);
 
 /**
  * DELETE /api/v1/projects/:projectId/revenuecat/config
@@ -212,26 +195,6 @@ router.delete(
         });
       }
 
-      // Delete the webhook from RevenueCat if we registered one
-      if (
-        project.revenuecat_webhook_integration_id &&
-        project.revenuecat_secret_key &&
-        project.revenuecat_project_id
-      ) {
-        try {
-          const decryptedKey = decrypt(project.revenuecat_secret_key);
-          await deleteWebhook(
-            { secretKey: decryptedKey, projectId: project.revenuecat_project_id },
-            project.revenuecat_webhook_integration_id
-          );
-          console.log(
-            `Deleted RevenueCat webhook ${project.revenuecat_webhook_integration_id} for project ${projectId}`
-          );
-        } catch (e) {
-          console.warn("Failed to delete RevenueCat webhook:", e);
-        }
-      }
-
       await storage.updateProjectRevenueCatConfig(projectId, {
         revenuecat_secret_key: null,
         revenuecat_project_id: null,
@@ -250,46 +213,50 @@ router.delete(
         error: "Failed to remove RevenueCat integration",
       });
     }
-  }
+  },
 );
 
 /**
  * GET /api/v1/projects/:projectId/revenuecat/metrics
  * Get all RevenueCat metrics for a project
  */
-router.get("/:projectId/revenuecat/metrics", async (req: Request, res: Response) => {
-  try {
-    const { projectId } = req.params;
-    const currency = (req.query.currency as string) || "USD";
+router.get(
+  "/:projectId/revenuecat/metrics",
+  async (req: Request, res: Response) => {
+    try {
+      const { projectId } = req.params;
+      const currency = (req.query.currency as string) || "USD";
 
-    const { config, project, error } = await getProjectRevenueCatConfig(projectId);
+      const { config, project, error } =
+        await getProjectRevenueCatConfig(projectId);
 
-    if (error || !config) {
-      return res.status(project ? 400 : 404).json({
+      if (error || !config) {
+        return res.status(project ? 400 : 404).json({
+          success: false,
+          error: error || "RevenueCat not configured",
+        });
+      }
+
+      const rawData = await getOverviewMetrics(config, currency);
+      const metrics = parseOverviewMetrics(rawData);
+
+      res.json({
+        success: true,
+        projectId,
+        currency,
+        metrics,
+        rawData,
+      });
+    } catch (error: any) {
+      console.error("Error fetching RevenueCat metrics:", error);
+      res.status(error.response?.status || 500).json({
         success: false,
-        error: error || "RevenueCat not configured",
+        error: error.message || "Failed to fetch RevenueCat metrics",
+        details: error.response?.data,
       });
     }
-
-    const rawData = await getOverviewMetrics(config, currency);
-    const metrics = parseOverviewMetrics(rawData);
-
-    res.json({
-      success: true,
-      projectId,
-      currency,
-      metrics,
-      rawData,
-    });
-  } catch (error: any) {
-    console.error("Error fetching RevenueCat metrics:", error);
-    res.status(error.response?.status || 500).json({
-      success: false,
-      error: error.message || "Failed to fetch RevenueCat metrics",
-      details: error.response?.data,
-    });
-  }
-});
+  },
+);
 
 /**
  * GET /api/v1/projects/:projectId/revenuecat/metrics/:metricId
@@ -302,7 +269,8 @@ router.get(
       const { projectId, metricId } = req.params;
       const currency = (req.query.currency as string) || "USD";
 
-      const { config, project, error } = await getProjectRevenueCatConfig(projectId);
+      const { config, project, error } =
+        await getProjectRevenueCatConfig(projectId);
 
       if (error || !config) {
         return res.status(project ? 400 : 404).json({
@@ -340,7 +308,7 @@ router.get(
         error: error.message || "Failed to fetch RevenueCat metric",
       });
     }
-  }
+  },
 );
 
 /**
@@ -354,7 +322,8 @@ router.get(
       const { projectId } = req.params;
       const currency = (req.query.currency as string) || "USD";
 
-      const { config, project, error } = await getProjectRevenueCatConfig(projectId);
+      const { config, project, error } =
+        await getProjectRevenueCatConfig(projectId);
 
       if (error || !config) {
         return res.status(project ? 400 : 404).json({
@@ -378,7 +347,7 @@ router.get(
         error: error.message || "Failed to fetch revenue summary",
       });
     }
-  }
+  },
 );
 
 /**
@@ -401,41 +370,26 @@ router.post(
       // Acknowledge receipt immediately (RevenueCat disconnects after 60s)
       res.status(200).send("OK");
 
-      if (payload.event?.type) {
-        const eventData = {
-          type: payload.event.type,
-          app_user_id: payload.event.app_user_id,
-          product_id: payload.event.product_id,
-          price_in_purchased_currency:
-            payload.event.price_in_purchased_currency,
-          currency: payload.event.currency,
-          store: payload.event.store,
-          country_code: payload.event.country_code,
-        };
-
-        // Broadcast to SSE clients for real-time toast
-        broadcaster.emit(`payment:${projectId}`, eventData);
-
-        // Fire-and-forget: Slack payment notification
-        try {
-          const project = await storage.getProject(projectId);
-          if (
-            project?.slack_enabled &&
-            project.slack_notify_payments &&
-            project.slack_webhook_url
-          ) {
-            const webhookUrl = decrypt(project.slack_webhook_url);
-            sendPaymentNotification(webhookUrl, eventData);
-          }
-        } catch (e) {
-          console.error("Slack payment notification error:", e);
-        }
-      }
+      // Broadcast payment event for real-time SSE listeners
+      const rcEvent = payload.event || {};
+      emitProjectEvent({
+        projectId,
+        type: "payment",
+        data: {
+          eventName: rcEvent.type || "UNKNOWN",
+          timestamp: Date.now(),
+          paymentType: rcEvent.type,
+          product_id: rcEvent.product_id,
+          price_in_purchased_currency: rcEvent.price_in_purchased_currency,
+          currency: rcEvent.currency,
+          store: rcEvent.store,
+        },
+      });
     } catch (error) {
       console.error("Webhook processing error:", error);
       res.status(200).send("Error logged");
     }
-  }
+  },
 );
 
 /**
@@ -478,7 +432,7 @@ router.post(
         error: error.message || "Failed to validate credentials",
       });
     }
-  }
+  },
 );
 
 export default router;
