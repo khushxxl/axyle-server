@@ -264,4 +264,10 @@ export interface StorageAdapter {
       slack_notify_quota: boolean;
     }
   ): Promise<void>;
+
+  // Slack Integration
+  updateProjectSlackConfig(
+    projectId: string,
+    config: Record<string, any>
+  ): Promise<void>;
 }

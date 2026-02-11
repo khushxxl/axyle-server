@@ -52,22 +52,28 @@ app.use(
     frameguard: {
       action: "deny",
     },
-  })
+  }),
 );
 
 // Additional security headers for sensitive endpoints
-app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
-  // Prevent caching of sensitive responses
-  if (req.path.includes("/api-keys") || req.path.includes("/revenuecat") || req.path.includes("/slack")) {
-    res.setHeader(
-      "Cache-Control",
-      "no-store, no-cache, must-revalidate, private"
-    );
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
-  }
-  next();
-});
+app.use(
+  (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    // Prevent caching of sensitive responses
+    if (
+      req.path.includes("/api-keys") ||
+      req.path.includes("/revenuecat") ||
+      req.path.includes("/slack")
+    ) {
+      res.setHeader(
+        "Cache-Control",
+        "no-store, no-cache, must-revalidate, private",
+      );
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+    }
+    next();
+  },
+);
 
 // CORS middleware
 app.use(

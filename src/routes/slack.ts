@@ -3,6 +3,7 @@
  */
 
 import { Router, Request, Response } from "express";
+
 import { storage } from "../db";
 import { encrypt, decrypt } from "../utils/encryption";
 import { testWebhook } from "../services/slackService";
@@ -27,7 +28,9 @@ router.put("/:projectId/slack/config", async (req: Request, res: Response) => {
 
     const project = await storage.getProject(projectId);
     if (!project) {
-      return res.status(404).json({ success: false, error: "Project not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Project not found" });
     }
 
     if (!webhookUrl || !webhookUrl.startsWith(SLACK_WEBHOOK_PREFIX)) {
@@ -59,7 +62,9 @@ router.put("/:projectId/slack/config", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error configuring Slack:", error);
-    res.status(500).json({ success: false, error: "Failed to configure Slack integration" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to configure Slack integration" });
   }
 });
 
@@ -73,7 +78,9 @@ router.get("/:projectId/slack/config", async (req: Request, res: Response) => {
 
     const project = await storage.getProject(projectId);
     if (!project) {
-      return res.status(404).json({ success: false, error: "Project not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Project not found" });
     }
 
     res.json({
@@ -88,7 +95,9 @@ router.get("/:projectId/slack/config", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error getting Slack config:", error);
-    res.status(500).json({ success: false, error: "Failed to get Slack configuration" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to get Slack configuration" });
   }
 });
 
@@ -96,29 +105,36 @@ router.get("/:projectId/slack/config", async (req: Request, res: Response) => {
  * DELETE /api/v1/projects/:projectId/slack/config
  * Disconnect — reset all Slack fields
  */
-router.delete("/:projectId/slack/config", async (req: Request, res: Response) => {
-  try {
-    const { projectId } = req.params;
+router.delete(
+  "/:projectId/slack/config",
+  async (req: Request, res: Response) => {
+    try {
+      const { projectId } = req.params;
 
-    const project = await storage.getProject(projectId);
-    if (!project) {
-      return res.status(404).json({ success: false, error: "Project not found" });
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        return res
+          .status(404)
+          .json({ success: false, error: "Project not found" });
+      }
+
+      await storage.updateProjectSlackConfig(projectId, {
+        slack_webhook_url: null,
+        slack_enabled: false,
+        slack_notify_payments: true,
+        slack_notify_crashes: true,
+        slack_notify_quota: true,
+      });
+
+      res.json({ success: true, message: "Slack integration removed" });
+    } catch (error) {
+      console.error("Error removing Slack config:", error);
+      res
+        .status(500)
+        .json({ success: false, error: "Failed to remove Slack integration" });
     }
-
-    await storage.updateProjectSlackConfig(projectId, {
-      slack_webhook_url: null,
-      slack_enabled: false,
-      slack_notify_payments: true,
-      slack_notify_crashes: true,
-      slack_notify_quota: true,
-    });
-
-    res.json({ success: true, message: "Slack integration removed" });
-  } catch (error) {
-    console.error("Error removing Slack config:", error);
-    res.status(500).json({ success: false, error: "Failed to remove Slack integration" });
-  }
-});
+  },
+);
 
 /**
  * POST /api/v1/projects/:projectId/slack/test
@@ -130,7 +146,9 @@ router.post("/:projectId/slack/test", async (req: Request, res: Response) => {
 
     const project = await storage.getProject(projectId);
     if (!project) {
-      return res.status(404).json({ success: false, error: "Project not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Project not found" });
     }
 
     if (!project.slack_enabled || !project.slack_webhook_url) {
@@ -144,18 +162,25 @@ router.post("/:projectId/slack/test", async (req: Request, res: Response) => {
     try {
       webhookUrl = decrypt(project.slack_webhook_url);
     } catch {
-      return res.status(500).json({ success: false, error: "Failed to decrypt webhook URL" });
+      return res
+        .status(500)
+        .json({ success: false, error: "Failed to decrypt webhook URL" });
     }
 
     const sent = await testWebhook(webhookUrl);
     if (sent) {
       res.json({ success: true, message: "Test message sent to Slack" });
     } else {
-      res.status(502).json({ success: false, error: "Failed to send test message to Slack" });
+      res.status(502).json({
+        success: false,
+        error: "Failed to send test message to Slack",
+      });
     }
   } catch (error) {
     console.error("Error testing Slack webhook:", error);
-    res.status(500).json({ success: false, error: "Failed to test Slack connection" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to test Slack connection" });
   }
 });
 

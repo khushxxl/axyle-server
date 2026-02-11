@@ -2592,4 +2592,16 @@ export class SupabaseStorage implements StorageAdapter {
 
     if (error) throw error;
   }
+
+  async updateProjectSlackConfig(
+    projectId: string,
+    config: Record<string, any>
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .from("projects")
+      .update(config)
+      .eq("id", projectId);
+
+    if (error) throw error;
+  }
 }
