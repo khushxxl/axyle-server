@@ -19,7 +19,8 @@ router.post("/accept", async (req: Request, res: Response) => {
     if (!userId) {
       return res.status(401).json({
         success: false,
-        error: "Authentication required. Sign in or create an account to accept this invitation.",
+        error:
+          "Authentication required. Sign in or create an account to accept this invitation.",
       });
     }
 

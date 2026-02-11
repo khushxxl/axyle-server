@@ -2574,14 +2574,45 @@ export class SupabaseStorage implements StorageAdapter {
       revenuecat_secret_key: string | null;
       revenuecat_project_id: string | null;
       revenuecat_enabled: boolean;
+      revenuecat_webhook_integration_id?: string | null;
+    }
+  ): Promise<void> {
+    const updateData: Record<string, any> = {
+      revenuecat_secret_key: config.revenuecat_secret_key,
+      revenuecat_project_id: config.revenuecat_project_id,
+      revenuecat_enabled: config.revenuecat_enabled,
+    };
+    if (config.revenuecat_webhook_integration_id !== undefined) {
+      updateData.revenuecat_webhook_integration_id =
+        config.revenuecat_webhook_integration_id;
+    }
+    const { error } = await this.supabase
+      .from("projects")
+      .update(updateData)
+      .eq("id", projectId);
+
+    if (error) throw error;
+  }
+
+  // Slack Integration
+  async updateProjectSlackConfig(
+    projectId: string,
+    config: {
+      slack_webhook_url: string | null;
+      slack_enabled: boolean;
+      slack_notify_payments: boolean;
+      slack_notify_crashes: boolean;
+      slack_notify_quota: boolean;
     }
   ): Promise<void> {
     const { error } = await this.supabase
       .from("projects")
       .update({
-        revenuecat_secret_key: config.revenuecat_secret_key,
-        revenuecat_project_id: config.revenuecat_project_id,
-        revenuecat_enabled: config.revenuecat_enabled,
+        slack_webhook_url: config.slack_webhook_url,
+        slack_enabled: config.slack_enabled,
+        slack_notify_payments: config.slack_notify_payments,
+        slack_notify_crashes: config.slack_notify_crashes,
+        slack_notify_quota: config.slack_notify_quota,
       })
       .eq("id", projectId);
 

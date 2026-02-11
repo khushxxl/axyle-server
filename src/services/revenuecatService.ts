@@ -187,7 +187,7 @@ export async function validateCredentials(
   } catch (error) {
     const axiosError = error as AxiosError;
     const status = axiosError.response?.status;
-    
+
     if (status === 401) {
       return { valid: false, error: "Invalid API key" };
     } else if (status === 404) {
@@ -198,5 +198,80 @@ export async function validateCredentials(
         error: axiosError.message || "Failed to validate credentials",
       };
     }
+  }
+}
+
+/**
+ * Register a webhook integration with RevenueCat API v2
+ * so RevenueCat sends payment events to our endpoint automatically.
+ */
+export async function registerWebhook(
+  config: RevenueCatConfig,
+  webhookUrl: string,
+  projectName: string
+): Promise<{ id: string } | { error: string }> {
+  const url = `${REVENUECAT_BASE_URL}/projects/${config.projectId}/integrations/webhooks`;
+
+  try {
+    const response = await axios.post(
+      url,
+      {
+        name: `Axyle – ${projectName}`,
+        url: webhookUrl,
+        environment: "production",
+        event_types: null, // all events
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${config.secretKey}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      }
+    );
+
+    return { id: response.data.id };
+  } catch (error) {
+    const axiosError = error as AxiosError;
+    console.error(
+      "RevenueCat webhook registration error:",
+      axiosError.response?.data || axiosError.message
+    );
+    return {
+      error:
+        (axiosError.response?.data as any)?.message ||
+        axiosError.message ||
+        "Failed to register webhook",
+    };
+  }
+}
+
+/**
+ * Delete a webhook integration from RevenueCat
+ */
+export async function deleteWebhook(
+  config: RevenueCatConfig,
+  webhookIntegrationId: string
+): Promise<{ success: boolean; error?: string }> {
+  const url = `${REVENUECAT_BASE_URL}/projects/${config.projectId}/integrations/webhooks/${webhookIntegrationId}`;
+
+  try {
+    await axios.delete(url, {
+      headers: {
+        Authorization: `Bearer ${config.secretKey}`,
+        Accept: "application/json",
+      },
+    });
+    return { success: true };
+  } catch (error) {
+    const axiosError = error as AxiosError;
+    console.error(
+      "RevenueCat webhook deletion error:",
+      axiosError.response?.data || axiosError.message
+    );
+    return {
+      success: false,
+      error: axiosError.message || "Failed to delete webhook",
+    };
   }
 }
