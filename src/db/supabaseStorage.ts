@@ -77,7 +77,7 @@ export class SupabaseStorage implements StorageAdapter {
     // Enrich with role information
     const enrichedProjects = (data || []).map((project) => {
       const membership = teamMemberships.find(
-        (m) => m.project_id === project.id
+        (m) => m.project_id === project.id,
       );
       return {
         ...project,
@@ -130,7 +130,7 @@ export class SupabaseStorage implements StorageAdapter {
         key_hash,
         is_active,
         projects!inner(id)
-      `
+      `,
       )
       .eq("key_hash", keyHash)
       .eq("is_active", true)
@@ -180,7 +180,7 @@ export class SupabaseStorage implements StorageAdapter {
   // Events
   async insertEvents(
     events: AnalyticsEvent[],
-    projectId: string
+    projectId: string,
   ): Promise<void> {
     const eventsToInsert = events.map((event) => ({
       id: event.id,
@@ -263,7 +263,7 @@ export class SupabaseStorage implements StorageAdapter {
 
   async updateProjectStats(
     projectId: string,
-    eventCount: number
+    eventCount: number,
   ): Promise<void> {
     const { data: project } = await this.supabase
       .from("projects")
@@ -287,7 +287,7 @@ export class SupabaseStorage implements StorageAdapter {
     let query = this.supabase
       .from("events")
       .select(
-        "id, event_name, properties, timestamp, user_id, session_id, app_name, device_type, os_name, environment, created_at"
+        "id, event_name, properties, timestamp, user_id, session_id, app_name, device_type, os_name, environment, created_at",
       )
       .eq("project_id", projectId)
       .order("timestamp", { ascending: false });
@@ -295,7 +295,7 @@ export class SupabaseStorage implements StorageAdapter {
     if (filters?.startDate) {
       query = query.gte(
         "created_at",
-        new Date(filters.startDate).toISOString()
+        new Date(filters.startDate).toISOString(),
       );
     }
     if (filters?.endDate) {
@@ -330,7 +330,7 @@ export class SupabaseStorage implements StorageAdapter {
         p_project_id: projectId,
         start_date: startDate,
         end_date: endDate,
-      }
+      },
     );
 
     if (!rpcError && rpcData) {
@@ -341,7 +341,7 @@ export class SupabaseStorage implements StorageAdapter {
     if (rpcError) {
       console.warn(
         "get_project_event_stats not available, using fallback (count may be capped at 1000):",
-        rpcError.message
+        rpcError.message,
       );
     }
 
@@ -353,13 +353,13 @@ export class SupabaseStorage implements StorageAdapter {
     if (filters?.startDate) {
       baseQuery = baseQuery.gte(
         "created_at",
-        new Date(filters.startDate).toISOString()
+        new Date(filters.startDate).toISOString(),
       );
     }
     if (filters?.endDate) {
       baseQuery = baseQuery.lte(
         "created_at",
-        new Date(filters.endDate).toISOString()
+        new Date(filters.endDate).toISOString(),
       );
     }
 
@@ -368,7 +368,7 @@ export class SupabaseStorage implements StorageAdapter {
 
     const totalEvents = allEvents?.length || 0;
     const uniqueUsers = new Set(
-      allEvents?.filter((e) => e.user_id).map((e) => e.user_id)
+      allEvents?.filter((e) => e.user_id).map((e) => e.user_id),
     ).size;
     const uniqueSessions = new Set(allEvents?.map((e) => e.session_id)).size;
     const uniqueDevices = new Set(allEvents?.map((e) => e.anonymous_id)).size;
@@ -450,13 +450,13 @@ export class SupabaseStorage implements StorageAdapter {
             ? new Date(filters.startDate)
             : new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
           const daysSinceStart = Math.floor(
-            (eventDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+            (eventDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
           );
           const weekNumber = Math.floor(daysSinceStart / 7) + 1;
           timeKey = `Week ${weekNumber}`;
           if (!weekStartDates[timeKey]) {
             weekStartDates[timeKey] = new Date(
-              startDate.getTime() + (weekNumber - 1) * 7 * 24 * 60 * 60 * 1000
+              startDate.getTime() + (weekNumber - 1) * 7 * 24 * 60 * 60 * 1000,
             );
           }
           break;
@@ -537,7 +537,7 @@ export class SupabaseStorage implements StorageAdapter {
     if (filters?.startDate) {
       query = query.gte(
         "created_at",
-        new Date(filters.startDate).toISOString()
+        new Date(filters.startDate).toISOString(),
       );
     }
     if (filters?.endDate) {
@@ -552,7 +552,7 @@ export class SupabaseStorage implements StorageAdapter {
     if (filters?.offset) {
       query = query.range(
         filters.offset,
-        filters.offset + (filters.limit || 100) - 1
+        filters.offset + (filters.limit || 100) - 1,
       );
     }
 
@@ -563,7 +563,7 @@ export class SupabaseStorage implements StorageAdapter {
 
   async getGlobalEventStats(
     projectIds?: string[],
-    filters?: { startDate?: string; endDate?: string }
+    filters?: { startDate?: string; endDate?: string },
   ): Promise<any> {
     // Use database functions for efficient count-only aggregation (no full row fetch)
     const rpcName =
@@ -593,7 +593,7 @@ export class SupabaseStorage implements StorageAdapter {
     if (error) {
       console.warn(
         "Database function not available, using fallback:",
-        error.message
+        error.message,
       );
       return this.getGlobalEventStatsFallback(projectIds, filters);
     }
@@ -614,7 +614,7 @@ export class SupabaseStorage implements StorageAdapter {
   // Fallback method if database function is not available or date filters are needed
   private async getGlobalEventStatsFallback(
     projectIds?: string[],
-    filters?: { startDate?: string; endDate?: string }
+    filters?: { startDate?: string; endDate?: string },
   ): Promise<any> {
     // Get ALL events in a single query
     let query = this.supabase
@@ -633,7 +633,7 @@ export class SupabaseStorage implements StorageAdapter {
     // Calculate overview stats from ALL events (not filtered)
     const totalEvents = allEventList.length;
     const uniqueUsers = new Set(
-      allEventList.filter((e) => e.user_id).map((e) => e.user_id)
+      allEventList.filter((e) => e.user_id).map((e) => e.user_id),
     ).size;
     const uniqueSessions = new Set(allEventList.map((e) => e.session_id)).size;
     const uniqueDevices = new Set(allEventList.map((e) => e.anonymous_id)).size;
@@ -743,7 +743,7 @@ export class SupabaseStorage implements StorageAdapter {
             ? new Date(filters.startDate)
             : new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
           const daysSinceStart = Math.floor(
-            (eventDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+            (eventDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
           );
           const weekNumber = Math.floor(daysSinceStart / 7) + 1;
           timeKey = `Week ${weekNumber}`;
@@ -818,7 +818,7 @@ export class SupabaseStorage implements StorageAdapter {
     let query = this.supabase
       .from("events")
       .select(
-        "id, event_name, properties, timestamp, user_id, anonymous_id, session_id, project_id, app_name, device_type, os_name, environment, created_at"
+        "id, event_name, properties, timestamp, user_id, anonymous_id, session_id, project_id, app_name, device_type, os_name, environment, created_at",
       )
       .order("timestamp", { ascending: false });
 
@@ -839,7 +839,7 @@ export class SupabaseStorage implements StorageAdapter {
 
   async getEventNames(
     projectIds?: string[],
-    projectId?: string
+    projectId?: string,
   ): Promise<string[]> {
     // Optimized query - only select event_name column
     let query = this.supabase
@@ -867,7 +867,7 @@ export class SupabaseStorage implements StorageAdapter {
 
   async getEventTrends(
     projectIds?: string[],
-    filters?: { startDate?: string; endDate?: string }
+    filters?: { startDate?: string; endDate?: string },
   ): Promise<any> {
     // If date filters are provided, use fallback method
     if (filters?.startDate || filters?.endDate) {
@@ -882,7 +882,7 @@ export class SupabaseStorage implements StorageAdapter {
     if (error) {
       console.warn(
         "Database function not available, using fallback:",
-        error.message
+        error.message,
       );
       return this.getEventTrendsFallback(projectIds, filters);
     }
@@ -897,7 +897,7 @@ export class SupabaseStorage implements StorageAdapter {
 
   private async getEventTrendsFallback(
     projectIds?: string[],
-    filters?: { startDate?: string; endDate?: string }
+    filters?: { startDate?: string; endDate?: string },
   ): Promise<any> {
     const now = new Date();
     let currentStart: Date;
@@ -966,10 +966,10 @@ export class SupabaseStorage implements StorageAdapter {
     ]);
 
     const currentUsers = new Set(
-      (currentUsersRes.data || []).map((e) => e.user_id)
+      (currentUsersRes.data || []).map((e) => e.user_id),
     ).size;
     const previousUsers = new Set(
-      (previousUsersRes.data || []).map((e) => e.user_id)
+      (previousUsersRes.data || []).map((e) => e.user_id),
     ).size;
 
     return {
@@ -986,14 +986,14 @@ export class SupabaseStorage implements StorageAdapter {
 
   async getAverageSessionTime(
     projectIds?: string[],
-    filters?: { startDate?: string; endDate?: string }
+    filters?: { startDate?: string; endDate?: string },
   ): Promise<any> {
     return this.getAverageSessionTimeFallback(projectIds, filters);
   }
 
   private async getAverageSessionTimeFallback(
     projectIds?: string[],
-    filters?: { startDate?: string; endDate?: string }
+    filters?: { startDate?: string; endDate?: string },
   ): Promise<any> {
     let query = this.supabase
       .from("sessions")
@@ -1027,7 +1027,7 @@ export class SupabaseStorage implements StorageAdapter {
 
     const totalDuration = sessions.reduce(
       (sum, s) => sum + (s.duration_ms || 0),
-      0
+      0,
     );
     const averageDurationMs = Math.round(totalDuration / sessions.length);
     const averageDurationSeconds = Math.round(averageDurationMs / 1000);
@@ -1069,7 +1069,7 @@ export class SupabaseStorage implements StorageAdapter {
 
   async getProjectUsers(
     projectId: string,
-    filters?: { limit?: number; offset?: number }
+    filters?: { limit?: number; offset?: number },
   ): Promise<
     Array<{
       user_id: string;
@@ -1135,7 +1135,7 @@ export class SupabaseStorage implements StorageAdapter {
     const users = Array.from(userMap.values())
       .sort(
         (a, b) =>
-          new Date(b.last_seen).getTime() - new Date(a.last_seen).getTime()
+          new Date(b.last_seen).getTime() - new Date(a.last_seen).getTime(),
       )
       .slice(offset, offset + limit);
 
@@ -1205,7 +1205,7 @@ export class SupabaseStorage implements StorageAdapter {
       steps?: string[];
       chart_type?: string;
       pinned?: boolean;
-    }
+    },
   ): Promise<any> {
     const updateData: any = {};
     if (data.name !== undefined) updateData.name = data.name;
@@ -1254,7 +1254,7 @@ export class SupabaseStorage implements StorageAdapter {
     if (filters?.startDate) {
       query = query.gte(
         "created_at",
-        new Date(filters.startDate).toISOString()
+        new Date(filters.startDate).toISOString(),
       );
     }
     if (filters?.endDate) {
@@ -1311,24 +1311,25 @@ export class SupabaseStorage implements StorageAdapter {
 
     const flowStarts = filteredEvents.filter(
       (e) =>
-        e.event_name === "Flow Started" || e.event_name === "Onboarding Started"
+        e.event_name === "Flow Started" ||
+        e.event_name === "Onboarding Started",
     );
     const flowCompletions = filteredEvents.filter(
       (e) =>
         e.event_name === "Flow Completed" ||
-        e.event_name === "Onboarding Completed"
+        e.event_name === "Onboarding Completed",
     );
     const flowAbandonments = filteredEvents.filter(
       (e) =>
         e.event_name === "Flow Abandoned" ||
-        e.event_name === "Onboarding Abandoned"
+        e.event_name === "Onboarding Abandoned",
     );
 
     // Count step views to infer starts
     const stepViews = filteredEvents.filter(
       (e) =>
         e.event_name === "Flow Step Viewed" ||
-        e.event_name === "Onboarding Step Viewed"
+        e.event_name === "Onboarding Step Viewed",
     );
 
     stepViews.forEach((view) => {
@@ -1368,7 +1369,7 @@ export class SupabaseStorage implements StorageAdapter {
     const stepCompletions = filteredEvents.filter(
       (e) =>
         e.event_name === "Flow Step Completed" ||
-        e.event_name === "Onboarding Step Completed"
+        e.event_name === "Onboarding Step Completed",
     );
 
     stepCompletions.forEach((completion) => {
@@ -1434,7 +1435,7 @@ export class SupabaseStorage implements StorageAdapter {
     const stepCompletedEvents = filteredEvents.filter(
       (e) =>
         e.event_name === "Flow Step Completed" ||
-        e.event_name === "Onboarding Step Completed"
+        e.event_name === "Onboarding Step Completed",
     );
 
     stepCompletedEvents.forEach((event) => {
@@ -1458,7 +1459,7 @@ export class SupabaseStorage implements StorageAdapter {
         const data = flow.average_step_duration[step];
         if (data.count > 0) {
           flow.average_step_duration[step] = Math.round(
-            data.total / data.count
+            data.total / data.count,
           );
         }
       });
@@ -1471,15 +1472,15 @@ export class SupabaseStorage implements StorageAdapter {
     // Calculate overall stats from flows (not just explicit events)
     const totalStarts = Object.values(flows).reduce(
       (sum: number, flow: any) => sum + flow.total_starts,
-      0
+      0,
     );
     const totalCompletions = Object.values(flows).reduce(
       (sum: number, flow: any) => sum + flow.total_completions,
-      0
+      0,
     );
     const totalAbandonments = Object.values(flows).reduce(
       (sum: number, flow: any) => sum + flow.total_abandonments,
-      0
+      0,
     );
 
     return {
@@ -1503,7 +1504,7 @@ export class SupabaseStorage implements StorageAdapter {
     if (filters?.startDate) {
       query = query.gte(
         "created_at",
-        new Date(filters.startDate).toISOString()
+        new Date(filters.startDate).toISOString(),
       );
     }
     if (filters?.endDate) {
@@ -1545,18 +1546,18 @@ export class SupabaseStorage implements StorageAdapter {
       screenStats[screen].total_time_ms += duration;
       screenStats[screen].min_time_ms = Math.min(
         screenStats[screen].min_time_ms,
-        duration
+        duration,
       );
       screenStats[screen].max_time_ms = Math.max(
         screenStats[screen].max_time_ms,
-        duration
+        duration,
       );
     });
 
     Object.values(screenStats).forEach((stat: any) => {
       if (stat.total_views > 0) {
         stat.average_time_ms = Math.round(
-          stat.total_time_ms / stat.total_views
+          stat.total_time_ms / stat.total_views,
         );
         stat.average_time_seconds = Math.round(stat.average_time_ms / 1000);
       }
@@ -1567,7 +1568,7 @@ export class SupabaseStorage implements StorageAdapter {
 
     return {
       screens: Object.values(screenStats).sort(
-        (a: any, b: any) => b.average_time_ms - a.average_time_ms
+        (a: any, b: any) => b.average_time_ms - a.average_time_ms,
       ),
       total_screens: Object.keys(screenStats).length,
       total_screen_views: filteredEvents.length,
@@ -1576,7 +1577,7 @@ export class SupabaseStorage implements StorageAdapter {
 
   async getFeatureUsageAnalytics(
     projectId: string,
-    filters?: any
+    filters?: any,
   ): Promise<any> {
     let query = this.supabase
       .from("events")
@@ -1587,7 +1588,7 @@ export class SupabaseStorage implements StorageAdapter {
     if (filters?.startDate) {
       query = query.gte(
         "created_at",
-        new Date(filters.startDate).toISOString()
+        new Date(filters.startDate).toISOString(),
       );
     }
     if (filters?.endDate) {
@@ -1663,10 +1664,10 @@ export class SupabaseStorage implements StorageAdapter {
       features: features.sort((a: any, b: any) => b.total_uses - a.total_uses),
       total_features: features.length,
       total_feature_uses: filteredEvents.filter(
-        (e) => e.event_name === "Feature Used"
+        (e) => e.event_name === "Feature Used",
       ).length,
       total_feature_views: filteredEvents.filter(
-        (e) => e.event_name === "Feature Viewed"
+        (e) => e.event_name === "Feature Viewed",
       ).length,
     };
   }
@@ -1681,7 +1682,7 @@ export class SupabaseStorage implements StorageAdapter {
     if (filters?.startDate) {
       query = query.gte(
         "created_at",
-        new Date(filters.startDate).toISOString()
+        new Date(filters.startDate).toISOString(),
       );
     }
     if (filters?.endDate) {
@@ -1742,7 +1743,7 @@ export class SupabaseStorage implements StorageAdapter {
         stat.scroll_depths.length > 0
           ? Math.round(
               stat.scroll_depths.reduce((a: number, b: number) => a + b, 0) /
-                stat.scroll_depths.length
+                stat.scroll_depths.length,
             )
           : 0;
 
@@ -1757,7 +1758,7 @@ export class SupabaseStorage implements StorageAdapter {
 
     return {
       screens: screens.sort(
-        (a: any, b: any) => b.average_scroll_depth - a.average_scroll_depth
+        (a: any, b: any) => b.average_scroll_depth - a.average_scroll_depth,
       ),
       total_screens: screens.length,
       total_scroll_events: filteredEvents.length,
@@ -1841,7 +1842,7 @@ export class SupabaseStorage implements StorageAdapter {
 
   async getSegmentUsers(
     segmentId: string,
-    filters?: { limit?: number; offset?: number }
+    filters?: { limit?: number; offset?: number },
   ): Promise<SegmentUser[]> {
     let query = this.supabase
       .from("segment_users")
@@ -1855,7 +1856,7 @@ export class SupabaseStorage implements StorageAdapter {
     if (filters?.offset) {
       query = query.range(
         filters.offset,
-        filters.offset + (filters.limit || 100) - 1
+        filters.offset + (filters.limit || 100) - 1,
       );
     }
 
@@ -1866,7 +1867,7 @@ export class SupabaseStorage implements StorageAdapter {
 
   async calculateSegmentSize(
     segmentId: string,
-    criteria: SegmentCriteria
+    criteria: SegmentCriteria,
   ): Promise<number> {
     // Get the segment's project
     const segment = await this.getSegment(segmentId);
@@ -1875,7 +1876,7 @@ export class SupabaseStorage implements StorageAdapter {
     // Calculate matching users using the same logic as previewSegmentSize
     const matchingUsers = await this.calculateMatchingUsers(
       segment.project_id,
-      criteria
+      criteria,
     );
 
     // Clear existing segment users
@@ -1922,7 +1923,7 @@ export class SupabaseStorage implements StorageAdapter {
 
   private async calculateMatchingUsers(
     projectId: string,
-    criteria: SegmentCriteria
+    criteria: SegmentCriteria,
   ): Promise<string[]> {
     if (!criteria.conditions || criteria.conditions.length === 0) {
       // No conditions means all users match
@@ -1953,7 +1954,7 @@ export class SupabaseStorage implements StorageAdapter {
         let query = this.supabase
           .from("events")
           .select(
-            "user_id, anonymous_id, event_name, properties, timestamp, created_at"
+            "user_id, anonymous_id, event_name, properties, timestamp, created_at",
           )
           .eq("project_id", projectId);
 
@@ -1982,7 +1983,7 @@ export class SupabaseStorage implements StorageAdapter {
           ) {
             query = query.gte(
               "created_at",
-              new Date(timeframe.value).toISOString()
+              new Date(timeframe.value).toISOString(),
             );
           } else if (
             timeframe.type === "before" &&
@@ -1990,7 +1991,7 @@ export class SupabaseStorage implements StorageAdapter {
           ) {
             query = query.lte(
               "created_at",
-              new Date(timeframe.value).toISOString()
+              new Date(timeframe.value).toISOString(),
             );
           }
         }
@@ -2064,7 +2065,7 @@ export class SupabaseStorage implements StorageAdapter {
         });
 
         return uniqueUsers;
-      }
+      },
     );
 
     // Wait for all condition queries
@@ -2078,7 +2079,7 @@ export class SupabaseStorage implements StorageAdapter {
       let intersection = conditionResults[0];
       for (let i = 1; i < conditionResults.length; i++) {
         intersection = new Set(
-          [...intersection].filter((user) => conditionResults[i].has(user))
+          [...intersection].filter((user) => conditionResults[i].has(user)),
         );
       }
       return Array.from(intersection);
@@ -2106,12 +2107,12 @@ export class SupabaseStorage implements StorageAdapter {
 
   async previewSegmentSize(
     projectId: string,
-    criteria: SegmentCriteria
+    criteria: SegmentCriteria,
   ): Promise<number> {
     // Reuse the same calculation logic
     const matchingUsers = await this.calculateMatchingUsers(
       projectId,
-      criteria
+      criteria,
     );
     return matchingUsers.length;
   }
@@ -2230,7 +2231,7 @@ export class SupabaseStorage implements StorageAdapter {
       onboarding_completed?: boolean;
       subscription_status?: string;
       subscription_plan?: string;
-    }
+    },
   ): Promise<PlatformUser> {
     const updateData: any = {};
 
@@ -2274,7 +2275,7 @@ export class SupabaseStorage implements StorageAdapter {
 
   // Team Members
   async getProjectTeamMembers(
-    projectId: string
+    projectId: string,
   ): Promise<import("./storage").TeamMember[]> {
     const { data, error } = await this.supabase
       .from("project_team_members")
@@ -2288,7 +2289,7 @@ export class SupabaseStorage implements StorageAdapter {
     const enrichedMembers = await Promise.all(
       (data || []).map(async (member) => {
         const { data: authUser } = await this.supabase.auth.admin.getUserById(
-          member.user_id
+          member.user_id,
         );
 
         return {
@@ -2307,14 +2308,14 @@ export class SupabaseStorage implements StorageAdapter {
               }
             : undefined,
         };
-      })
+      }),
     );
 
     return enrichedMembers;
   }
 
   async getTeamMember(
-    memberId: string
+    memberId: string,
   ): Promise<import("./storage").TeamMember | null> {
     const { data, error } = await this.supabase
       .from("project_team_members")
@@ -2452,7 +2453,7 @@ export class SupabaseStorage implements StorageAdapter {
     const { data, error } = await this.supabase
       .from("project_invitations")
       .select(
-        "id, project_id, email, invited_by, status, expires_at, projects(name)"
+        "id, project_id, email, invited_by, status, expires_at, projects(name)",
       )
       .eq("token", token)
       .single();
@@ -2473,9 +2474,7 @@ export class SupabaseStorage implements StorageAdapter {
     };
   }
 
-  async listPendingInvitations(
-    projectId: string
-  ): Promise<
+  async listPendingInvitations(projectId: string): Promise<
     Array<{
       id: string;
       email: string;
@@ -2504,14 +2503,13 @@ export class SupabaseStorage implements StorageAdapter {
 
   async acceptInvitation(
     token: string,
-    userId: string
+    userId: string,
   ): Promise<{ projectId: string; projectName: string } | { error: string }> {
     const inv = await this.getInvitationByToken(token);
     if (!inv) return { error: "Invalid or expired invitation" };
 
-    const { data: authUser } = await this.supabase.auth.admin.getUserById(
-      userId
-    );
+    const { data: authUser } =
+      await this.supabase.auth.admin.getUserById(userId);
     if (!authUser?.user?.email) return { error: "User not found" };
     const userEmail = authUser.user.email.toLowerCase().trim();
     if (userEmail !== inv.email.toLowerCase()) {
@@ -2549,7 +2547,7 @@ export class SupabaseStorage implements StorageAdapter {
       revenuecat_project_id: string | null;
       revenuecat_enabled: boolean;
       revenuecat_webhook_integration_id?: string | null;
-    }
+    },
   ): Promise<void> {
     const updateData: Record<string, any> = {
       revenuecat_secret_key: config.revenuecat_secret_key,
@@ -2577,7 +2575,7 @@ export class SupabaseStorage implements StorageAdapter {
       slack_notify_payments: boolean;
       slack_notify_crashes: boolean;
       slack_notify_quota: boolean;
-    }
+    },
   ): Promise<void> {
     const { error } = await this.supabase
       .from("projects")
@@ -2588,18 +2586,6 @@ export class SupabaseStorage implements StorageAdapter {
         slack_notify_crashes: config.slack_notify_crashes,
         slack_notify_quota: config.slack_notify_quota,
       })
-      .eq("id", projectId);
-
-    if (error) throw error;
-  }
-
-  async updateProjectSlackConfig(
-    projectId: string,
-    config: Record<string, any>
-  ): Promise<void> {
-    const { error } = await this.supabase
-      .from("projects")
-      .update(config)
       .eq("id", projectId);
 
     if (error) throw error;
