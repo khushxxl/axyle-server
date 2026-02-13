@@ -16,6 +16,8 @@ export interface PlanLimits {
   funnels: number;
   /** Data retention in days. -1 = unlimited */
   dataRetentionDays: number;
+  /** Max AI messages per calendar month. -1 = unlimited, 0 = none */
+  aiMessagesPerMonth: number;
 }
 
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
@@ -25,6 +27,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     teamSeatsPerProject: 1,
     funnels: 0,
     dataRetentionDays: 0,
+    aiMessagesPerMonth: 0,
   },
   starter: {
     eventsPerMonth: 50_000,
@@ -32,6 +35,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     teamSeatsPerProject: 1,
     funnels: 3,
     dataRetentionDays: 14,
+    aiMessagesPerMonth: 10,
   },
   pro: {
     eventsPerMonth: 1_500_000,
@@ -39,6 +43,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     teamSeatsPerProject: 5,
     funnels: -1,
     dataRetentionDays: 365,
+    aiMessagesPerMonth: -1,
   },
   scale: {
     eventsPerMonth: 6_000_000,
@@ -46,6 +51,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     teamSeatsPerProject: 15,
     funnels: -1,
     dataRetentionDays: 365 * 3,
+    aiMessagesPerMonth: -1,
   },
 };
 

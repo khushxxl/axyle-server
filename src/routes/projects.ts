@@ -4,6 +4,7 @@
 
 import { Router, Request, Response } from "express";
 import { storage } from "../db";
+import { supabase } from "../db/supabase";
 import { randomUUID, randomBytes } from "crypto";
 import { apiKeyCreationRateLimiter } from "../middleware/rateLimiting";
 import { getPlanLimits, isUnlimited } from "../config/plan-limits";
@@ -25,6 +26,7 @@ router.post("/", async (req: Request, res: Response) => {
       maxQueueSize = 100,
       flushInterval = 10000,
       sessionTimeout = 1800000,
+      platform = "both",
     } = req.body;
 
     // Validate required fields
@@ -63,6 +65,7 @@ router.post("/", async (req: Request, res: Response) => {
       max_queue_size: maxQueueSize,
       flush_interval: flushInterval,
       session_timeout: sessionTimeout,
+      platform,
     });
 
     res.status(201).json({
@@ -72,6 +75,7 @@ router.post("/", async (req: Request, res: Response) => {
         name: project.name,
         userId: project.user_id,
         environment: project.environment,
+        platform: project.platform,
         createdAt: project.created_at,
       },
     });
@@ -105,6 +109,8 @@ router.get("/", async (req: Request, res: Response) => {
         created_at: p.created_at,
         total_events: p.total_events,
         last_event_at: p.last_event_at,
+        logo_url: p.logo_url,
+        platform: p.platform,
       })),
     });
   } catch (error) {
@@ -306,6 +312,39 @@ router.get("/:projectId/users", async (req: Request, res: Response) => {
 });
 
 /**
+ * PATCH /api/v1/projects/:projectId
+ * Update project details (name, logo_url, app_store_id)
+ */
+router.patch("/:projectId", async (req: Request, res: Response) => {
+  try {
+    const { projectId } = req.params;
+    const { name, logo_url, app_store_id } = req.body;
+
+    const project = await storage.getProject(projectId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: "Project not found" });
+    }
+
+    const update: Record<string, any> = {};
+    if (name !== undefined) update.name = name;
+    if (logo_url !== undefined) update.logo_url = logo_url;
+    if (app_store_id !== undefined) update.app_store_id = app_store_id;
+
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ success: false, error: "No fields to update" });
+    }
+
+    await storage.updateProject(projectId, update);
+
+    const updated = await storage.getProject(projectId);
+    res.json({ success: true, project: updated });
+  } catch (error) {
+    console.error("Error updating project:", error);
+    res.status(500).json({ success: false, error: "Failed to update project" });
+  }
+});
+
+/**
  * DELETE /api/v1/projects/:projectId
  * Delete a project
  */
@@ -344,6 +383,68 @@ router.delete("/:projectId", async (req: Request, res: Response) => {
       success: false,
       error: "Failed to delete project",
     });
+  }
+});
+
+/**
+ * POST /api/v1/projects/:projectId/logo
+ * Upload a project logo (accepts base64 data URL, stores in Supabase Storage)
+ */
+router.post("/:projectId/logo", async (req: Request, res: Response) => {
+  try {
+    const { projectId } = req.params;
+    const { image } = req.body; // base64 data URL
+
+    if (!image || !image.startsWith("data:image/")) {
+      return res.status(400).json({ success: false, error: "Invalid image data" });
+    }
+
+    const project = await storage.getProject(projectId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: "Project not found" });
+    }
+
+    // Parse data URL → buffer
+    const matches = image.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (!matches) {
+      return res.status(400).json({ success: false, error: "Invalid base64 image format" });
+    }
+
+    const ext = matches[1] === "jpeg" ? "jpg" : matches[1];
+    const buffer = Buffer.from(matches[2], "base64");
+
+    // Max 2MB
+    if (buffer.length > 2 * 1024 * 1024) {
+      return res.status(400).json({ success: false, error: "Image must be under 2MB" });
+    }
+
+    const filePath = `${projectId}/logo.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("project-logos")
+      .upload(filePath, buffer, {
+        contentType: `image/${matches[1]}`,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error("Logo upload error:", uploadError);
+      return res.status(500).json({ success: false, error: "Failed to upload logo" });
+    }
+
+    const { data: urlData } = supabase.storage
+      .from("project-logos")
+      .getPublicUrl(filePath);
+
+    const publicUrl = urlData.publicUrl;
+
+    // Save URL to project
+    await storage.updateProject(projectId, { logo_url: publicUrl });
+
+    res.json({ success: true, logo_url: publicUrl });
+  } catch (error) {
+    console.error("Error uploading logo:", error);
+    res.status(500).json({ success: false, error: "Failed to upload logo" });
   }
 });
 

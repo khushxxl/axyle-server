@@ -41,6 +41,8 @@ export class SupabaseStorage implements StorageAdapter {
   }
 
   async listProjects(userId?: string): Promise<any[]> {
+    let projects: any[];
+
     if (!userId) {
       // If no userId, return all projects (admin view)
       const { data, error } = await this.supabase
@@ -48,44 +50,74 @@ export class SupabaseStorage implements StorageAdapter {
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data || [];
+      projects = data || [];
+    } else {
+      // Get projects where user is a team member
+      const { data: teamMemberships, error: teamError } = await this.supabase
+        .from("project_team_members")
+        .select("project_id, role")
+        .eq("user_id", userId);
+
+      if (teamError) throw teamError;
+
+      if (!teamMemberships || teamMemberships.length === 0) {
+        return [];
+      }
+
+      const projectIds = teamMemberships.map((m) => m.project_id);
+
+      // Get project details
+      const { data, error } = await this.supabase
+        .from("projects")
+        .select("*")
+        .in("id", projectIds)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // Enrich with role information
+      projects = (data || []).map((project) => {
+        const membership = teamMemberships.find(
+          (m) => m.project_id === project.id,
+        );
+        return {
+          ...project,
+          role: membership?.role || "member",
+        };
+      });
     }
 
-    // Get projects where user is a team member
-    const { data: teamMemberships, error: teamError } = await this.supabase
-      .from("project_team_members")
-      .select("project_id, role")
-      .eq("user_id", userId);
+    // Enrich with real event counts from events table
+    if (projects.length > 0) {
+      try {
+        const ids = projects.map((p) => p.id);
+        const { data: counts } = await this.supabase
+          .rpc("get_project_event_counts", { project_ids: ids });
 
-    if (teamError) throw teamError;
-
-    if (!teamMemberships || teamMemberships.length === 0) {
-      return [];
+        if (counts) {
+          const countMap: Record<string, number> = {};
+          for (const row of counts) {
+            countMap[row.project_id] = row.count;
+          }
+          for (const p of projects) {
+            p.total_events = countMap[p.id] || p.total_events || 0;
+          }
+        }
+      } catch {
+        // RPC not deployed yet — fall back to stored total_events
+      }
     }
 
-    const projectIds = teamMemberships.map((m) => m.project_id);
+    return projects;
+  }
 
-    // Get project details
-    const { data, error } = await this.supabase
+  async updateProject(id: string, data: Record<string, any>): Promise<void> {
+    const { error } = await this.supabase
       .from("projects")
-      .select("*")
-      .in("id", projectIds)
-      .order("created_at", { ascending: false });
+      .update(data)
+      .eq("id", id);
 
     if (error) throw error;
-
-    // Enrich with role information
-    const enrichedProjects = (data || []).map((project) => {
-      const membership = teamMemberships.find(
-        (m) => m.project_id === project.id,
-      );
-      return {
-        ...project,
-        role: membership?.role || "member",
-      };
-    });
-
-    return enrichedProjects;
   }
 
   async deleteProject(id: string): Promise<void> {
@@ -1002,13 +1034,13 @@ export class SupabaseStorage implements StorageAdapter {
       .gt("duration_ms", 0);
 
     if (filters?.startDate) {
-      const startDate = new Date(filters.startDate);
+      const startDate = new Date(filters.startDate + "T00:00:00");
       const startTimestamp = Math.floor(startDate.getTime() / 1000) * 1000;
       query = query.gte("start_time", startTimestamp.toString());
     }
 
     if (filters?.endDate) {
-      const endDate = new Date(filters.endDate);
+      const endDate = new Date(filters.endDate + "T23:59:59.999");
       const endTimestamp = Math.floor(endDate.getTime() / 1000) * 1000;
       query = query.lte("start_time", endTimestamp.toString());
     }
@@ -2271,6 +2303,35 @@ export class SupabaseStorage implements StorageAdapter {
 
     // Get platform user data
     return this.getUser(authUser.id);
+  }
+
+  async getAiMessageCount(userId: string): Promise<{ count: number; month: string }> {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const user = await this.getUser(userId);
+    if (!user || user.ai_message_count_month !== currentMonth) {
+      return { count: 0, month: currentMonth };
+    }
+    return { count: user.ai_message_count, month: currentMonth };
+  }
+
+  async incrementAiMessageCount(userId: string): Promise<number> {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const user = await this.getUser(userId);
+    if (!user) throw new Error("User not found");
+
+    const isNewMonth = user.ai_message_count_month !== currentMonth;
+    const newCount = isNewMonth ? 1 : user.ai_message_count + 1;
+
+    const { error } = await this.supabase
+      .from("users")
+      .update({
+        ai_message_count: newCount,
+        ai_message_count_month: currentMonth,
+      })
+      .eq("id", userId);
+
+    if (error) throw error;
+    return newCount;
   }
 
   // Team Members

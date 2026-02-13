@@ -64,6 +64,8 @@ export interface PlatformUser {
   subscription_plan: string;
   welcome_email_sent: boolean;
   welcome_email_sent_at?: string;
+  ai_message_count: number;
+  ai_message_count_month: string;
   created_at: string;
   updated_at: string;
 }
@@ -89,6 +91,7 @@ export interface StorageAdapter {
   createProject(data: any): Promise<any>;
   getProject(id: string): Promise<any | null>;
   listProjects(userId?: string): Promise<any[]>;
+  updateProject(id: string, data: Record<string, any>): Promise<void>;
   deleteProject(id: string): Promise<void>;
 
   // API Keys
@@ -201,6 +204,8 @@ export interface StorageAdapter {
     }
   ): Promise<PlatformUser>;
   getUserByEmail(email: string): Promise<PlatformUser | null>;
+  getAiMessageCount(userId: string): Promise<{ count: number; month: string }>;
+  incrementAiMessageCount(userId: string): Promise<number>;
 
   // Team Members
   getProjectTeamMembers(projectId: string): Promise<TeamMember[]>;

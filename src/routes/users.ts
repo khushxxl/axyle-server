@@ -111,6 +111,8 @@ router.get("/me/usage", async (req: Request, res: Response) => {
         ? await storage.countFunnelsForProjectIds(projectIds)
         : 0;
 
+    const aiMessageUsage = await storage.getAiMessageCount(userId);
+
     res.json({
       success: true,
       plan,
@@ -119,6 +121,7 @@ router.get("/me/usage", async (req: Request, res: Response) => {
         projects: projects.length,
         teamSeatsUsed: maxTeamSeats,
         funnels: funnelsCount,
+        aiMessagesThisMonth: aiMessageUsage.count,
       },
       limits: {
         eventsPerMonth: limits.eventsPerMonth,
@@ -126,6 +129,7 @@ router.get("/me/usage", async (req: Request, res: Response) => {
         teamSeatsPerProject: limits.teamSeatsPerProject,
         funnels: limits.funnels,
         dataRetentionDays: limits.dataRetentionDays,
+        aiMessagesPerMonth: limits.aiMessagesPerMonth,
       },
     });
   } catch (error) {

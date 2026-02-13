@@ -7,6 +7,7 @@ import OpenAI from "openai";
 import { config } from "../config";
 import { storage } from "../db";
 import { requireSupabaseAuth } from "../middleware/supabaseAuth";
+import { getPlanLimits, isUnlimited } from "../config/plan-limits";
 
 const router = Router();
 
@@ -109,6 +110,19 @@ router.post(
           error:
             "AI service is not configured. Please set OPENAI_API_KEY environment variable.",
         });
+      }
+
+      // Enforce AI message limit based on plan
+      const user = await storage.getOrCreateUser(userId);
+      const limits = getPlanLimits(user.subscription_plan);
+      if (!isUnlimited(limits.aiMessagesPerMonth)) {
+        const { count } = await storage.getAiMessageCount(userId);
+        if (count >= limits.aiMessagesPerMonth) {
+          return res.status(402).json({
+            success: false,
+            error: `AI message limit reached (${limits.aiMessagesPerMonth} messages/month). Upgrade to Pro for unlimited AI messages.`,
+          });
+        }
       }
 
       // Get user's projects
@@ -677,6 +691,11 @@ Rules:
       const aiResponse =
         completion.choices[0]?.message?.content ||
         "I apologize, but I couldn't generate a response. Please try again.";
+
+      // Increment AI message count after successful response
+      await storage.incrementAiMessageCount(userId).catch((err: any) => {
+        console.error("Failed to increment AI message count:", err);
+      });
 
       res.json({
         success: true,
