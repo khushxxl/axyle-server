@@ -6,7 +6,7 @@ import { Router, Request, Response } from "express";
 
 import { storage } from "../db";
 import { encrypt, decrypt } from "../utils/encryption";
-import { testWebhook } from "../services/slackService";
+import { testWebhook, sendCrashNotification } from "../services/slackService";
 
 const router = Router();
 
@@ -167,7 +167,20 @@ router.post("/:projectId/slack/test", async (req: Request, res: Response) => {
         .json({ success: false, error: "Failed to decrypt webhook URL" });
     }
 
-    const sent = await testWebhook(webhookUrl);
+    const type = req.query.type as string | undefined;
+    let sent: boolean;
+    if (type === "crash") {
+      await sendCrashNotification(webhookUrl, {
+        eventName: "EXC_BAD_ACCESS",
+        userId: "usr_8f2k91x",
+        deviceInfo: "iPhone 15 Pro · iOS 18.2",
+        projectName: project.name || "My App",
+        count: 12,
+      });
+      sent = true;
+    } else {
+      sent = await testWebhook(webhookUrl);
+    }
     if (sent) {
       res.json({ success: true, message: "Test message sent to Slack" });
     } else {
