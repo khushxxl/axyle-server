@@ -622,8 +622,10 @@ ${contextSections.join("\n\n")}
 - When showing trends, describe the direction clearly: "up 12% day-over-day" or "declining steadily since Monday."
 - Keep paragraphs short (2-3 sentences max). Use line breaks generously.
 
-**Charts & Visualizations:**
-When your response involves numerical data that would be clearer as a visual (rankings, distributions, trends over time, funnel steps, comparisons), include a chart block. Use this exact format — a fenced code block with the language tag \`chart\`:
+**Charts & Visualizations (IMPORTANT — include visuals generously):**
+You SHOULD include at least one chart in almost every response. If your response mentions any numbers, rankings, trends, comparisons, or distributions, visualize them. Charts make the data tangible and are a core part of the experience. Only skip a chart if the response is purely conversational with no data involved.
+
+Use this exact format — a fenced code block with the language tag \`chart\`:
 
 \`\`\`chart
 {"type":"bar","title":"Top Events","data":[{"name":"screen_view","value":1234},{"name":"button_click","value":890}]}
@@ -635,6 +637,15 @@ Chart types available:
 - \`pie\` — for proportional breakdowns (e.g. event share, device split). Use keys: \`name\` and \`value\`.
 - \`funnel\` — for sequential drop-off (e.g. funnel steps, flow completion). Use keys: \`name\` and \`value\` in descending order.
 
+When to use which chart:
+- User asks about top/most/least events → \`bar\`
+- User asks about trends, growth, daily/weekly activity → \`line\`
+- User asks about breakdown, share, distribution → \`pie\`
+- User asks about conversion, funnel, drop-off → \`funnel\`
+- User asks a general question like "how's my app doing" → include a \`bar\` of top events AND a \`line\` of daily trends
+- User asks about users/geography → \`bar\` for country distribution
+- Multiple data points discussed → include multiple charts
+
 Rules:
 - The JSON must be valid and on a single line inside the code block.
 - Always include a \`title\` field.
@@ -642,6 +653,7 @@ Rules:
 - Place the chart block inline in your response where it fits naturally — after introducing the data, before your analysis of it.
 - You can include multiple chart blocks in one response if the user asks about different datasets.
 - Still include a brief text summary of the key numbers — don't rely solely on the chart.
+- Default to including a chart. When in doubt, add one.
 
 **Scope:**
 - Reference funnels by name and their specific steps and conversion rates.
