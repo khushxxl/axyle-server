@@ -28,7 +28,6 @@ import sseRouter from "./routes/sse";
 import inviteRouter from "./routes/invite";
 import emailsRouter from "./routes/emails";
 
-
 const app = express();
 
 // Security middleware (must be first)
@@ -129,7 +128,6 @@ app.use("/api/v1/projects", slackRouter); // Slack integration
 app.use("/api/v1/projects", sseRouter); // SSE real-time events
 app.use("/api/v1/invite", inviteRouter); // Project invite accept
 app.use("/api/v1/emails", emailsRouter);
-
 
 // Error handling
 app.use(notFoundHandler);

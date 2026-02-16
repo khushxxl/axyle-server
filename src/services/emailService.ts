@@ -8,7 +8,8 @@ import { Resend } from "resend";
 const WEB_URL = process.env.WEB_URL || "http://localhost:3000";
 const LOGO_URL =
   process.env.EMAIL_LOGO_URL ||
-  "https://i.ibb.co/YBVWTyGH/Frame-2147259039-3.png";
+  "https://ymlbdzrcyiomhzqvasuj.supabase.co/storage/v1/object/public/project-logos/axyle/axyle-logo.png";
+
 
 let resendInstance: Resend | null = null;
 

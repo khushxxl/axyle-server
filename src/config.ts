@@ -14,7 +14,7 @@ function requireEnv(name: string): string {
   if (!value) {
     throw new Error(
       `❌ SECURITY ERROR: Required environment variable ${name} is not set. ` +
-        `Please set it in your .env file or environment. See SECURITY.md for details.`
+        `Please set it in your .env file or environment. See SECURITY.md for details.`,
     );
   }
   return value;
@@ -27,7 +27,7 @@ function validateEncryptionKey(key: string): string {
   if (key.length < 32) {
     throw new Error(
       `❌ SECURITY ERROR: API_KEY_ENCRYPTION_KEY must be at least 32 characters long. ` +
-        `Current length: ${key.length}. Use a cryptographically random string.`
+        `Current length: ${key.length}. Use a cryptographically random string.`,
     );
   }
   // Check for common weak patterns
@@ -39,7 +39,7 @@ function validateEncryptionKey(key: string): string {
   ) {
     throw new Error(
       `❌ SECURITY ERROR: API_KEY_ENCRYPTION_KEY appears to be a weak or default value. ` +
-        `Use a cryptographically random string (e.g., generated with: openssl rand -base64 32)`
+        `Use a cryptographically random string (e.g., generated with: openssl rand -base64 32)`,
     );
   }
   return key;
@@ -52,7 +52,7 @@ function validateJwtSecret(secret: string): string {
   if (secret.length < 32) {
     throw new Error(
       `❌ SECURITY ERROR: JWT_SECRET must be at least 32 characters long. ` +
-        `Current length: ${secret.length}. Use a cryptographically random string.`
+        `Current length: ${secret.length}. Use a cryptographically random string.`,
     );
   }
   if (
@@ -63,7 +63,7 @@ function validateJwtSecret(secret: string): string {
   ) {
     throw new Error(
       `❌ SECURITY ERROR: JWT_SECRET appears to be a weak or default value. ` +
-        `Use a cryptographically random string (e.g., generated with: openssl rand -base64 32)`
+        `Use a cryptographically random string (e.g., generated with: openssl rand -base64 32)`,
     );
   }
   return secret;
@@ -79,7 +79,7 @@ function parseCorsOrigin(origin: string, nodeEnv: string): string | string[] {
       console.warn(
         `⚠️  WARNING: CORS_ORIGIN is set to "*" in production. ` +
           `This allows any website to access your API. ` +
-          `Set CORS_ORIGIN to your specific domain (e.g., https://yourdomain.com)`
+          `Set CORS_ORIGIN to your specific domain (e.g., https://yourdomain.com)`,
       );
     }
     return origin || "*";
@@ -93,7 +93,7 @@ function parseCorsOrigin(origin: string, nodeEnv: string): string | string[] {
       .filter((o) => o.length > 0);
 
     console.log(
-      `✅ CORS configured for ${origins.length} origin(s): ${origins.join(", ")}`
+      `✅ CORS configured for ${origins.length} origin(s): ${origins.join(", ")}`,
     );
     return origins;
   }
@@ -104,14 +104,16 @@ function parseCorsOrigin(origin: string, nodeEnv: string): string | string[] {
 }
 
 const nodeEnv = process.env.NODE_ENV || "development";
-const corsOriginRaw = process.env.CORS_ORIGIN || (nodeEnv === "development" ? "*" : "");
+const corsOriginRaw =
+  process.env.CORS_ORIGIN ||
+  (nodeEnv === "development" ? "*" : "https://axyle.app,https://www.axyle.app");
 
 // Validate CORS origin
 if (nodeEnv === "production" && !corsOriginRaw) {
   throw new Error(
     `❌ SECURITY ERROR: CORS_ORIGIN must be set in production. ` +
       `Set it to your web app's domain (e.g., https://yourdomain.com) ` +
-      `or multiple domains separated by commas (e.g., https://app.com,https://admin.app.com)`
+      `or multiple domains separated by commas (e.g., https://app.com,https://admin.app.com)`,
   );
 }
 
@@ -131,7 +133,7 @@ export const config = {
   security: {
     jwtSecret: validateJwtSecret(requireEnv("JWT_SECRET")),
     apiKeyEncryptionKey: validateEncryptionKey(
-      requireEnv("API_KEY_ENCRYPTION_KEY")
+      requireEnv("API_KEY_ENCRYPTION_KEY"),
     ),
   },
   rateLimit: {
@@ -141,11 +143,11 @@ export const config = {
     apiKeyCreation: {
       windowMs: parseInt(
         process.env.API_KEY_RATE_LIMIT_WINDOW_MS || "3600000",
-        10
+        10,
       ), // 1 hour
       maxRequests: parseInt(
         process.env.API_KEY_RATE_LIMIT_MAX_REQUESTS || "10",
-        10
+        10,
       ),
     },
   },
