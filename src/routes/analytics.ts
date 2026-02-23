@@ -5,7 +5,6 @@
 import { Router, Request, Response } from 'express';
 import { validateApiKey } from '../middleware/auth';
 import { storage } from '../db';
-import { onProjectEvent } from '../services/eventBus';
 
 const router = Router();
 
@@ -87,42 +86,6 @@ router.get(
         error: 'Failed to fetch statistics',
       });
     }
-  }
-);
-
-/**
- * GET /api/v1/projects/:projectId/events/stream
- * Server-Sent Events endpoint for real-time event notifications
- */
-router.get(
-  '/:projectId/events/stream',
-  (req: Request, res: Response) => {
-    const { projectId } = req.params;
-
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    });
-
-    // Initial OK comment
-    res.write(':ok\n\n');
-
-    // 30s keepalive ping
-    const keepalive = setInterval(() => {
-      res.write(':ping\n\n');
-    }, 30000);
-
-    // Subscribe to project events
-    const unsubscribe = onProjectEvent(projectId, (payload) => {
-      res.write(`event: ${payload.type}\ndata: ${JSON.stringify(payload.data)}\n\n`);
-    });
-
-    req.on('close', () => {
-      clearInterval(keepalive);
-      unsubscribe();
-    });
   }
 );
 

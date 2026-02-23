@@ -87,8 +87,11 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting middleware (apply before routes)
-app.use(generalRateLimiter);
+// Rate limiting middleware (apply before routes, skip SSE streams)
+app.use((req, res, next) => {
+  if (req.path.endsWith("/events/stream")) return next();
+  return generalRateLimiter(req, res, next);
+});
 
 // Supabase authentication middleware (optional - extracts user if token provided)
 app.use(validateSupabaseAuth);
