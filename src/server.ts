@@ -27,6 +27,7 @@ import slackRouter from "./routes/slack";
 import sseRouter from "./routes/sse";
 import inviteRouter from "./routes/invite";
 import emailsRouter from "./routes/emails";
+import sharedProjectsRouter from "./routes/shared-projects";
 
 const app = express();
 
@@ -131,6 +132,7 @@ app.use("/api/v1/projects", slackRouter); // Slack integration
 app.use("/api/v1/projects", sseRouter); // SSE real-time events
 app.use("/api/v1/invite", inviteRouter); // Project invite accept
 app.use("/api/v1/emails", emailsRouter);
+app.use("/api/v1/shared-projects", sharedProjectsRouter); // Public shareable dashboards
 
 // Error handling
 app.use(notFoundHandler);

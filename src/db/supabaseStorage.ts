@@ -2651,4 +2651,105 @@ export class SupabaseStorage implements StorageAdapter {
 
     if (error) throw error;
   }
+
+  // Shared Projects
+  async createSharedProject(data: {
+    projectId: string;
+    userId: string;
+    shareToken: string;
+    visibleMetrics?: Record<string, boolean>;
+  }): Promise<{ id: string; share_token: string }> {
+    const { data: existing } = await this.supabase
+      .from("shared_projects")
+      .select("id, share_token")
+      .eq("project_id", data.projectId)
+      .single();
+
+    if (existing) {
+      // Re-activate existing share
+      const updateData: Record<string, any> = {
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      };
+      if (data.visibleMetrics) {
+        updateData.visible_metrics = data.visibleMetrics;
+      }
+      await this.supabase
+        .from("shared_projects")
+        .update(updateData)
+        .eq("id", existing.id);
+      return { id: existing.id, share_token: existing.share_token };
+    }
+
+    const { data: row, error } = await this.supabase
+      .from("shared_projects")
+      .insert({
+        project_id: data.projectId,
+        user_id: data.userId,
+        share_token: data.shareToken,
+        is_active: true,
+        ...(data.visibleMetrics && { visible_metrics: data.visibleMetrics }),
+      })
+      .select("id, share_token")
+      .single();
+
+    if (error) throw error;
+    return row!;
+  }
+
+  async getSharedProjectByProjectId(projectId: string): Promise<{
+    id: string;
+    project_id: string;
+    user_id: string;
+    share_token: string;
+    is_active: boolean;
+    visible_metrics: Record<string, boolean>;
+    created_at: string;
+    updated_at: string;
+  } | null> {
+    const { data, error } = await this.supabase
+      .from("shared_projects")
+      .select("*")
+      .eq("project_id", projectId)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data || null;
+  }
+
+  async getSharedProjectByToken(token: string): Promise<{
+    id: string;
+    project_id: string;
+    user_id: string;
+    is_active: boolean;
+    visible_metrics: Record<string, boolean>;
+  } | null> {
+    const { data, error } = await this.supabase
+      .from("shared_projects")
+      .select("id, project_id, user_id, is_active, visible_metrics")
+      .eq("share_token", token)
+      .eq("is_active", true)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data || null;
+  }
+
+  async updateSharedProject(
+    projectId: string,
+    data: { isActive?: boolean; visibleMetrics?: Record<string, boolean> },
+  ): Promise<void> {
+    const updateData: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (data.isActive !== undefined) updateData.is_active = data.isActive;
+    if (data.visibleMetrics) updateData.visible_metrics = data.visibleMetrics;
+
+    const { error } = await this.supabase
+      .from("shared_projects")
+      .update(updateData)
+      .eq("project_id", projectId);
+
+    if (error) throw error;
+  }
 }

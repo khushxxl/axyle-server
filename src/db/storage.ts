@@ -275,4 +275,33 @@ export interface StorageAdapter {
     projectId: string,
     config: Record<string, any>
   ): Promise<void>;
+
+  // Shared Projects (public dashboard links)
+  createSharedProject(data: {
+    projectId: string;
+    userId: string;
+    shareToken: string;
+    visibleMetrics?: Record<string, boolean>;
+  }): Promise<{ id: string; share_token: string }>;
+  getSharedProjectByProjectId(projectId: string): Promise<{
+    id: string;
+    project_id: string;
+    user_id: string;
+    share_token: string;
+    is_active: boolean;
+    visible_metrics: Record<string, boolean>;
+    created_at: string;
+    updated_at: string;
+  } | null>;
+  getSharedProjectByToken(token: string): Promise<{
+    id: string;
+    project_id: string;
+    user_id: string;
+    is_active: boolean;
+    visible_metrics: Record<string, boolean>;
+  } | null>;
+  updateSharedProject(
+    projectId: string,
+    data: { isActive?: boolean; visibleMetrics?: Record<string, boolean> }
+  ): Promise<void>;
 }
