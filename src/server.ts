@@ -28,6 +28,7 @@ import sseRouter from "./routes/sse";
 import inviteRouter from "./routes/invite";
 import emailsRouter from "./routes/emails";
 import sharedProjectsRouter from "./routes/shared-projects";
+import sharemrrRouter from "./routes/sharemrr";
 
 const app = express();
 
@@ -133,6 +134,7 @@ app.use("/api/v1/projects", sseRouter); // SSE real-time events
 app.use("/api/v1/invite", inviteRouter); // Project invite accept
 app.use("/api/v1/emails", emailsRouter);
 app.use("/api/v1/shared-projects", sharedProjectsRouter); // Public shareable dashboards
+app.use("/api/v1/sharemrr", sharemrrRouter); // ShareMRR public cards
 
 // Error handling
 app.use(notFoundHandler);

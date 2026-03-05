@@ -2652,6 +2652,46 @@ export class SupabaseStorage implements StorageAdapter {
     if (error) throw error;
   }
 
+  // ShareMRR Cards
+  async createShareMRRCard(data: {
+    token: string;
+    revenuecatCredentials: string;
+    styleConfig: Record<string, any>;
+    appName: string;
+  }): Promise<{ id: string; token: string }> {
+    const { data: row, error } = await this.supabase
+      .from("sharemrr_cards")
+      .insert({
+        token: data.token,
+        revenuecat_credentials: data.revenuecatCredentials,
+        style_config: data.styleConfig,
+        app_name: data.appName,
+      })
+      .select("id, token")
+      .single();
+
+    if (error) throw error;
+    return row!;
+  }
+
+  async getShareMRRCard(token: string): Promise<{
+    id: string;
+    token: string;
+    revenuecat_credentials: string;
+    style_config: Record<string, any>;
+    app_name: string;
+    created_at: string;
+  } | null> {
+    const { data, error } = await this.supabase
+      .from("sharemrr_cards")
+      .select("id, token, revenuecat_credentials, style_config, app_name, created_at")
+      .eq("token", token)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data || null;
+  }
+
   // Shared Projects
   async createSharedProject(data: {
     projectId: string;

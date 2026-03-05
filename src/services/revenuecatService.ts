@@ -176,6 +176,26 @@ export function getAvailableMetricIds(): string[] {
 }
 
 /**
+ * Fetch the project name from RevenueCat API
+ */
+export async function getProjectName(
+  config: RevenueCatConfig
+): Promise<string> {
+  const url = `${REVENUECAT_BASE_URL}/projects/${config.projectId}`;
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        Authorization: `Bearer ${config.secretKey}`,
+        Accept: "application/json",
+      },
+    });
+    return response.data.name || "";
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Validate RevenueCat credentials by making a test API call
  */
 export async function validateCredentials(

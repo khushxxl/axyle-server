@@ -27,6 +27,8 @@ router.post("/", async (req: Request, res: Response) => {
       flushInterval = 10000,
       sessionTimeout = 1800000,
       platform = "both",
+      logo_url,
+      app_store_id,
     } = req.body;
 
     // Validate required fields
@@ -66,6 +68,8 @@ router.post("/", async (req: Request, res: Response) => {
       flush_interval: flushInterval,
       session_timeout: sessionTimeout,
       platform,
+      ...(logo_url && { logo_url }),
+      ...(app_store_id && { app_store_id }),
     });
 
     res.status(201).json({

@@ -276,6 +276,22 @@ export interface StorageAdapter {
     config: Record<string, any>
   ): Promise<void>;
 
+  // ShareMRR Cards
+  createShareMRRCard(data: {
+    token: string;
+    revenuecatCredentials: string;
+    styleConfig: Record<string, any>;
+    appName: string;
+  }): Promise<{ id: string; token: string }>;
+  getShareMRRCard(token: string): Promise<{
+    id: string;
+    token: string;
+    revenuecat_credentials: string;
+    style_config: Record<string, any>;
+    app_name: string;
+    created_at: string;
+  } | null>;
+
   // Shared Projects (public dashboard links)
   createSharedProject(data: {
     projectId: string;
