@@ -2655,17 +2655,21 @@ export class SupabaseStorage implements StorageAdapter {
   // ShareMRR Cards
   async createShareMRRCard(data: {
     token: string;
-    revenuecatCredentials: string;
+    revenuecatCredentials?: string;
     styleConfig: Record<string, any>;
     appName: string;
+    source: "revenuecat" | "trustmrr";
+    trustmrrSlug?: string;
   }): Promise<{ id: string; token: string }> {
     const { data: row, error } = await this.supabase
       .from("sharemrr_cards")
       .insert({
         token: data.token,
-        revenuecat_credentials: data.revenuecatCredentials,
+        revenuecat_credentials: data.revenuecatCredentials || null,
         style_config: data.styleConfig,
         app_name: data.appName,
+        source: data.source,
+        trustmrr_slug: data.trustmrrSlug || null,
       })
       .select("id, token")
       .single();
@@ -2677,14 +2681,16 @@ export class SupabaseStorage implements StorageAdapter {
   async getShareMRRCard(token: string): Promise<{
     id: string;
     token: string;
-    revenuecat_credentials: string;
+    revenuecat_credentials: string | null;
     style_config: Record<string, any>;
     app_name: string;
+    source: "revenuecat" | "trustmrr";
+    trustmrr_slug: string | null;
     created_at: string;
   } | null> {
     const { data, error } = await this.supabase
       .from("sharemrr_cards")
-      .select("id, token, revenuecat_credentials, style_config, app_name, created_at")
+      .select("id, token, revenuecat_credentials, style_config, app_name, source, trustmrr_slug, created_at")
       .eq("token", token)
       .single();
 

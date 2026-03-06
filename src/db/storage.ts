@@ -279,16 +279,20 @@ export interface StorageAdapter {
   // ShareMRR Cards
   createShareMRRCard(data: {
     token: string;
-    revenuecatCredentials: string;
+    revenuecatCredentials?: string;
     styleConfig: Record<string, any>;
     appName: string;
+    source: "revenuecat" | "trustmrr";
+    trustmrrSlug?: string;
   }): Promise<{ id: string; token: string }>;
   getShareMRRCard(token: string): Promise<{
     id: string;
     token: string;
-    revenuecat_credentials: string;
+    revenuecat_credentials: string | null;
     style_config: Record<string, any>;
     app_name: string;
+    source: "revenuecat" | "trustmrr";
+    trustmrr_slug: string | null;
     created_at: string;
   } | null>;
 
