@@ -29,6 +29,7 @@ import inviteRouter from "./routes/invite";
 import emailsRouter from "./routes/emails";
 import sharedProjectsRouter from "./routes/shared-projects";
 import sharemrrRouter from "./routes/sharemrr";
+import asoRouter from "./routes/aso";
 
 const app = express();
 
@@ -135,6 +136,7 @@ app.use("/api/v1/invite", inviteRouter); // Project invite accept
 app.use("/api/v1/emails", emailsRouter);
 app.use("/api/v1/shared-projects", sharedProjectsRouter); // Public shareable dashboards
 app.use("/api/v1/sharemrr", sharemrrRouter); // ShareMRR public cards
+app.use("/api/v1/aso", asoRouter); // ASO Audit tool
 
 // Error handling
 app.use(notFoundHandler);
