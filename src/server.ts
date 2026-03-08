@@ -30,6 +30,7 @@ import emailsRouter from "./routes/emails";
 import sharedProjectsRouter from "./routes/shared-projects";
 import sharemrrRouter from "./routes/sharemrr";
 import asoRouter from "./routes/aso";
+import keywordRouter from "./routes/keyword";
 
 const app = express();
 
@@ -137,6 +138,7 @@ app.use("/api/v1/emails", emailsRouter);
 app.use("/api/v1/shared-projects", sharedProjectsRouter); // Public shareable dashboards
 app.use("/api/v1/sharemrr", sharemrrRouter); // ShareMRR public cards
 app.use("/api/v1/aso", asoRouter); // ASO Audit tool
+app.use("/api/v1/keyword", keywordRouter); // Keyword Researcher tool
 
 // Error handling
 app.use(notFoundHandler);
