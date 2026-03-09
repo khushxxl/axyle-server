@@ -234,8 +234,8 @@ export class SupabaseStorage implements StorageAdapter {
       device_brand: event.context.device.brand || null,
       os_name: event.context.os.name,
       os_version: event.context.os.version,
-      screen_width: event.context.screen?.width || null,
-      screen_height: event.context.screen?.height || null,
+      screen_width: event.context.screen?.width ? Math.round(event.context.screen.width) : null,
+      screen_height: event.context.screen?.height ? Math.round(event.context.screen.height) : null,
       screen_density: event.context.screen?.density || null,
       locale: event.context.locale
         ? String(event.context.locale).substring(0, 20)
