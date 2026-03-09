@@ -3,7 +3,15 @@
  * Used for server-side enforcement (projects, team, funnels, events).
  */
 
-export type PlanId = "free" | "starter" | "pro" | "scale";
+export type PlanId =
+  | "free"
+  | "starter"
+  | "launch"
+  | "growth"
+  | "pro"
+  | "scale"
+  | "business"
+  | "enterprise";
 
 export interface PlanLimits {
   /** Max events per calendar month (across all user's projects). -1 = unlimited */
@@ -37,8 +45,24 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     dataRetentionDays: 14,
     aiMessagesPerMonth: 10,
   },
+  launch: {
+    eventsPerMonth: 100_000,
+    projects: 3,
+    teamSeatsPerProject: 1,
+    funnels: 5,
+    dataRetentionDays: 30,
+    aiMessagesPerMonth: 25,
+  },
+  growth: {
+    eventsPerMonth: 250_000,
+    projects: 5,
+    teamSeatsPerProject: 3,
+    funnels: -1,
+    dataRetentionDays: 90,
+    aiMessagesPerMonth: -1,
+  },
   pro: {
-    eventsPerMonth: 1_500_000,
+    eventsPerMonth: 500_000,
     projects: -1,
     teamSeatsPerProject: 5,
     funnels: -1,
@@ -46,9 +70,25 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     aiMessagesPerMonth: -1,
   },
   scale: {
-    eventsPerMonth: 6_000_000,
+    eventsPerMonth: 1_000_000,
+    projects: -1,
+    teamSeatsPerProject: 10,
+    funnels: -1,
+    dataRetentionDays: 365,
+    aiMessagesPerMonth: -1,
+  },
+  business: {
+    eventsPerMonth: 2_000_000,
     projects: -1,
     teamSeatsPerProject: 15,
+    funnels: -1,
+    dataRetentionDays: 365 * 2,
+    aiMessagesPerMonth: -1,
+  },
+  enterprise: {
+    eventsPerMonth: 5_000_000,
+    projects: -1,
+    teamSeatsPerProject: 25,
     funnels: -1,
     dataRetentionDays: 365 * 3,
     aiMessagesPerMonth: -1,

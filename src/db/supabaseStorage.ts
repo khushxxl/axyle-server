@@ -2798,4 +2798,47 @@ export class SupabaseStorage implements StorageAdapter {
 
     if (error) throw error;
   }
+
+  // Privacy Policy Generator
+  async createPrivacyPolicy(data: {
+    token: string;
+    appName: string;
+    policyContent: string;
+    formData: Record<string, any>;
+    effectiveDate: string;
+  }): Promise<{ id: string; token: string }> {
+    const { data: row, error } = await this.supabase
+      .from("privacy_policies")
+      .insert({
+        token: data.token,
+        app_name: data.appName,
+        policy_content: data.policyContent,
+        form_data: data.formData,
+        effective_date: data.effectiveDate,
+      })
+      .select("id, token")
+      .single();
+
+    if (error) throw error;
+    return row!;
+  }
+
+  async getPrivacyPolicy(token: string): Promise<{
+    id: string;
+    token: string;
+    app_name: string;
+    policy_content: string;
+    form_data: Record<string, any>;
+    effective_date: string;
+    created_at: string;
+  } | null> {
+    const { data, error } = await this.supabase
+      .from("privacy_policies")
+      .select("id, token, app_name, policy_content, form_data, effective_date, created_at")
+      .eq("token", token)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data || null;
+  }
 }

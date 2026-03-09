@@ -324,4 +324,22 @@ export interface StorageAdapter {
     projectId: string,
     data: { isActive?: boolean; visibleMetrics?: Record<string, boolean> }
   ): Promise<void>;
+
+  // Privacy Policy Generator
+  createPrivacyPolicy(data: {
+    token: string;
+    appName: string;
+    policyContent: string;
+    formData: Record<string, any>;
+    effectiveDate: string;
+  }): Promise<{ id: string; token: string }>;
+  getPrivacyPolicy(token: string): Promise<{
+    id: string;
+    token: string;
+    app_name: string;
+    policy_content: string;
+    form_data: Record<string, any>;
+    effective_date: string;
+    created_at: string;
+  } | null>;
 }

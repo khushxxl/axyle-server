@@ -31,6 +31,7 @@ import sharedProjectsRouter from "./routes/shared-projects";
 import sharemrrRouter from "./routes/sharemrr";
 import asoRouter from "./routes/aso";
 import keywordRouter from "./routes/keyword";
+import privacyPolicyRouter from "./routes/privacy-policy";
 
 const app = express();
 
@@ -139,6 +140,7 @@ app.use("/api/v1/shared-projects", sharedProjectsRouter); // Public shareable da
 app.use("/api/v1/sharemrr", sharemrrRouter); // ShareMRR public cards
 app.use("/api/v1/aso", asoRouter); // ASO Audit tool
 app.use("/api/v1/keyword", keywordRouter); // Keyword Researcher tool
+app.use("/api/v1/privacy-policy", privacyPolicyRouter); // Privacy Policy Generator tool
 
 // Error handling
 app.use(notFoundHandler);
