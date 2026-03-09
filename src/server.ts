@@ -32,6 +32,7 @@ import sharemrrRouter from "./routes/sharemrr";
 import asoRouter from "./routes/aso";
 import keywordRouter from "./routes/keyword";
 import privacyPolicyRouter from "./routes/privacy-policy";
+import mcpRouter from "./routes/mcp";
 
 const app = express();
 
@@ -141,6 +142,7 @@ app.use("/api/v1/sharemrr", sharemrrRouter); // ShareMRR public cards
 app.use("/api/v1/aso", asoRouter); // ASO Audit tool
 app.use("/api/v1/keyword", keywordRouter); // Keyword Researcher tool
 app.use("/api/v1/privacy-policy", privacyPolicyRouter); // Privacy Policy Generator tool
+app.use("/api/mcp", mcpRouter); // MCP server for Claude Desktop / Claude Code / Cursor
 
 // Error handling
 app.use(notFoundHandler);
