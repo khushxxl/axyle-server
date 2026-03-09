@@ -319,7 +319,7 @@ export class SupabaseStorage implements StorageAdapter {
     let query = this.supabase
       .from("events")
       .select(
-        "id, event_name, properties, timestamp, user_id, session_id, app_name, device_type, os_name, environment, created_at",
+        "id, event_name, properties, timestamp, user_id, anonymous_id, session_id, app_name, app_version, app_build, device_type, device_model, device_manufacturer, device_brand, os_name, os_version, screen_width, screen_height, locale, timezone, environment, created_at",
       )
       .eq("project_id", projectId)
       .order("timestamp", { ascending: false });
@@ -850,7 +850,7 @@ export class SupabaseStorage implements StorageAdapter {
     let query = this.supabase
       .from("events")
       .select(
-        "id, event_name, properties, timestamp, user_id, anonymous_id, session_id, project_id, app_name, device_type, os_name, environment, created_at",
+        "id, event_name, properties, timestamp, user_id, anonymous_id, session_id, project_id, app_name, app_version, app_build, device_type, device_model, device_manufacturer, device_brand, os_name, os_version, screen_width, screen_height, locale, timezone, environment, created_at",
       )
       .order("timestamp", { ascending: false });
 
