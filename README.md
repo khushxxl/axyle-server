@@ -43,20 +43,21 @@ npm install
 ```
 
 2. Set up Supabase (required):
-
    - Create a new Supabase project at https://supabase.com
    - Run the migration SQL in your Supabase SQL editor (in order):
+
      ```bash
      # Copy and paste migrations/001_initial_schema.sql into Supabase SQL editor
      # Copy and paste migrations/003_segments.sql into Supabase SQL editor
-     # Copy and paste migrations/007_users_onboarding.sql into Supabase SQL editor
-     # Optionally run migrations/002_seed_data.sql for development
+
      ```
+
    - Get your Supabase credentials from Project Settings → API
 
 3. Set up environment variables:
 
 For **development**:
+
 ```bash
 # Copy the development example
 cp .env.development.example .env
@@ -106,6 +107,7 @@ npm run dev
 ### Production
 
 **⚠️ Before deploying to production:**
+
 1. Review [SECURITY.md](./SECURITY.md) for security requirements
 2. Generate production secrets: `./scripts/generate-secrets.sh`
 3. Set all required environment variables
@@ -216,6 +218,7 @@ Note: Seed data is optional and only for development/testing.
 ## Security
 
 See [SECURITY.md](./SECURITY.md) for:
+
 - Required environment variables
 - Security features and implementation details
 - Deployment checklist
@@ -225,6 +228,7 @@ See [SECURITY.md](./SECURITY.md) for:
 ## Environment Variables
 
 ### Required
+
 - `JWT_SECRET` - Min 32 characters, cryptographically random
 - `API_KEY_ENCRYPTION_KEY` - Min 32 characters, cryptographically random
 - `SUPABASE_URL` - Your Supabase project URL
@@ -233,11 +237,13 @@ See [SECURITY.md](./SECURITY.md) for:
 - `CORS_ORIGIN` - Your web app domain (production only)
 
 ### Optional
+
 - `OPENAI_API_KEY` - For AI assistant feature
 - `RESEND_API_KEY` - For email notifications
 - Rate limiting configuration (see `.env.example`)
 
 Generate secure secrets with:
+
 ```bash
 ./scripts/generate-secrets.sh
 ```
