@@ -201,6 +201,7 @@ export interface StorageAdapter {
       onboarding_completed?: boolean;
       subscription_status?: string;
       subscription_plan?: string;
+      notifications_id?: string | null;
     }
   ): Promise<PlatformUser>;
   getUserByEmail(email: string): Promise<PlatformUser | null>;

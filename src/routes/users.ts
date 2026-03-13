@@ -164,6 +164,7 @@ router.put("/me", async (req: Request, res: Response) => {
       onboarding_completed,
       subscription_status,
       subscription_plan,
+      notifications_id,
     } = req.body;
 
     // Build update data
@@ -172,6 +173,7 @@ router.put("/me", async (req: Request, res: Response) => {
       onboarding_completed?: boolean;
       subscription_status?: string;
       subscription_plan?: string;
+      notifications_id?: string | null;
     } = {};
 
     if (onboarding_answers !== undefined) {
@@ -185,6 +187,9 @@ router.put("/me", async (req: Request, res: Response) => {
     }
     if (subscription_plan !== undefined) {
       updateData.subscription_plan = subscription_plan;
+    }
+    if (notifications_id !== undefined) {
+      updateData.notifications_id = notifications_id;
     }
 
     // Ensure user exists

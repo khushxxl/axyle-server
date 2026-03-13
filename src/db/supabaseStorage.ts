@@ -2258,6 +2258,7 @@ export class SupabaseStorage implements StorageAdapter {
       onboarding_completed?: boolean;
       subscription_status?: string;
       subscription_plan?: string;
+      notifications_id?: string | null;
     },
   ): Promise<PlatformUser> {
     const updateData: any = {};
@@ -2273,6 +2274,9 @@ export class SupabaseStorage implements StorageAdapter {
     }
     if (data.subscription_plan !== undefined) {
       updateData.subscription_plan = data.subscription_plan;
+    }
+    if (data.notifications_id !== undefined) {
+      updateData.notifications_id = data.notifications_id;
     }
 
     const { data: updatedUser, error } = await this.supabase
