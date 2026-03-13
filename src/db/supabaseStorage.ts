@@ -44,13 +44,8 @@ export class SupabaseStorage implements StorageAdapter {
     let projects: any[];
 
     if (!userId) {
-      // If no userId, return all projects (admin view)
-      const { data, error } = await this.supabase
-        .from("projects")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      projects = data || [];
+      // No userId — return empty to prevent leaking other users' projects
+      return [];
     } else {
       // Get projects where user is a team member
       const { data: teamMemberships, error: teamError } = await this.supabase

@@ -7,6 +7,7 @@ import { storage } from "../db";
 import { supabase } from "../db/supabase";
 import { randomUUID, randomBytes } from "crypto";
 import { apiKeyCreationRateLimiter } from "../middleware/rateLimiting";
+import { requireSupabaseAuth } from "../middleware/supabaseAuth";
 import { getPlanLimits, isUnlimited } from "../config/plan-limits";
 
 const router = Router();
@@ -96,11 +97,9 @@ router.post("/", async (req: Request, res: Response) => {
  * GET /api/v1/projects
  * List all projects (for a user if userId provided or authenticated user)
  */
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", requireSupabaseAuth, async (req: Request, res: Response) => {
   try {
-    // Use authenticated user_id if available, otherwise use query param
-    const userId =
-      req.supabaseUserId || (req.query.userId as string | undefined);
+    const userId = req.supabaseUserId!;
 
     const projects = await storage.listProjects(userId);
 
@@ -130,9 +129,19 @@ router.get("/", async (req: Request, res: Response) => {
  * GET /api/v1/projects/:projectId
  * Get a specific project
  */
-router.get("/:projectId", async (req: Request, res: Response) => {
+router.get("/:projectId", requireSupabaseAuth, async (req: Request, res: Response) => {
   try {
     const { projectId } = req.params;
+    const userId = req.supabaseUserId!;
+
+    // Verify user has access to this project
+    const userProjects = await storage.listProjects(userId);
+    if (!userProjects.some((p) => p.id === projectId)) {
+      return res.status(404).json({
+        success: false,
+        error: "Project not found",
+      });
+    }
 
     const project = await storage.getProject(projectId);
 
