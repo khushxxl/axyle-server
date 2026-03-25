@@ -17,6 +17,24 @@ export async function insertEventsBatch(
   if (events.length === 0) return;
   await storage.insertEvents(events, projectId);
 
+  // Upsert sessions from event data (fire-and-forget to not slow down ingestion)
+  storage
+    .upsertSessions(
+      events.map((e) => ({
+        sessionId: e.sessionId,
+        projectId,
+        userId: e.userId,
+        anonymousId: e.anonymousId,
+        timestamp: e.timestamp,
+        name: e.name,
+        deviceType: e.context?.device?.type,
+        osName: e.context?.os?.name,
+        appVersion: e.context?.app?.version,
+        environment: e.context?.environment,
+      })),
+    )
+    .catch((err) => console.error("Session upsert error:", err));
+
   // Broadcast each event for real-time SSE listeners
   for (const event of events) {
     emitProjectEvent({

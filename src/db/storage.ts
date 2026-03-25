@@ -125,6 +125,21 @@ export interface StorageAdapter {
     filters?: { startDate?: string; endDate?: string }
   ): Promise<any>;
 
+  upsertSessions(
+    events: Array<{
+      sessionId: string;
+      projectId: string;
+      userId?: string | null;
+      anonymousId: string;
+      timestamp: number;
+      name: string;
+      deviceType?: string;
+      osName?: string;
+      appVersion?: string;
+      environment?: string;
+    }>
+  ): Promise<void>;
+
   // Platform tokens
   getPlatformToken(token: string): Promise<any | null>;
 
@@ -275,6 +290,19 @@ export interface StorageAdapter {
   updateProjectSlackConfig(
     projectId: string,
     config: Record<string, any>
+  ): Promise<void>;
+
+  // Superwall Integration
+  updateProjectSuperwallConfig(
+    projectId: string,
+    config: {
+      superwall_api_key: string | null;
+      superwall_project_id: string | null;
+      superwall_application_id: string | null;
+      superwall_project_name: string | null;
+      superwall_application_name: string | null;
+      superwall_enabled: boolean;
+    }
   ): Promise<void>;
 
   // ShareMRR Cards

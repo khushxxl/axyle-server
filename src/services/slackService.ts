@@ -204,3 +204,33 @@ export async function sendQuotaWarning(
     console.error("Slack quota warning error:", error);
   }
 }
+
+export async function sendSuperwallConnectedNotification(
+  webhookUrl: string,
+  appName: string,
+  superwallProjectName: string,
+): Promise<void> {
+  try {
+    const subtitle = superwallProjectName
+      ? `Superwall project *${superwallProjectName}* is now linked.`
+      : "Superwall is now linked.";
+
+    const blocks: SlackBlock[] = [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `:link: *${appName}* has connected to Superwall using Axyle\n${subtitle} You'll receive payment notifications here automatically.`,
+        },
+      },
+    ];
+
+    await sendSlackMessage(
+      webhookUrl,
+      blocks,
+      `${appName} has connected to Superwall using Axyle`,
+    );
+  } catch (error) {
+    console.error("Slack Superwall connected notification error:", error);
+  }
+}

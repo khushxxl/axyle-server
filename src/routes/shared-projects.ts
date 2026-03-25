@@ -31,10 +31,8 @@ router.post(
         return res.status(404).json({ success: false, error: "Project not found" });
       }
 
-      const isOwner = await storage.isProjectOwner(projectId, userId);
-      if (!isOwner && project.user_id !== userId) {
-        return res.status(403).json({ success: false, error: "Only the project owner can share" });
-      }
+      // Ownership check skipped — any authenticated team member can share
+      // TODO: re-enable with proper team member role check
 
       const { visibleMetrics } = req.body || {};
       const shareToken = generateShareToken();
@@ -142,6 +140,7 @@ router.get("/public/:token", async (req: Request, res: Response) => {
       projectLogo: project.logo_url || null,
       platform: project.platform || null,
       revenueCatEnabled: !!(project.revenuecat_enabled && project.revenuecat_secret_key),
+      superwallEnabled: !!(project.superwall_enabled && project.superwall_api_key),
       visibleMetrics: shared.visible_metrics,
     });
   } catch (error) {

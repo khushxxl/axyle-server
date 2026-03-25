@@ -1018,6 +1018,121 @@ export class SupabaseStorage implements StorageAdapter {
     return this.getAverageSessionTimeFallback(projectIds, filters);
   }
 
+  async upsertSessions(
+    events: Array<{
+      sessionId: string;
+      projectId: string;
+      userId?: string | null;
+      anonymousId: string;
+      timestamp: number;
+      name: string;
+      deviceType?: string;
+      osName?: string;
+      appVersion?: string;
+      environment?: string;
+    }>,
+  ): Promise<void> {
+    if (events.length === 0) return;
+
+    // Group events by session_id
+    const sessionMap = new Map<
+      string,
+      {
+        session_id: string;
+        project_id: string;
+        user_id: string | null;
+        anonymous_id: string;
+        min_ts: number;
+        max_ts: number;
+        event_count: number;
+        first_event: string;
+        last_event: string;
+        device_type: string | null;
+        os_name: string | null;
+        app_version: string | null;
+        environment: string | null;
+      }
+    >();
+
+    for (const e of events) {
+      const existing = sessionMap.get(e.sessionId);
+      if (existing) {
+        if (e.timestamp < existing.min_ts) {
+          existing.min_ts = e.timestamp;
+          existing.first_event = e.name;
+        }
+        if (e.timestamp > existing.max_ts) {
+          existing.max_ts = e.timestamp;
+          existing.last_event = e.name;
+        }
+        existing.event_count++;
+        if (e.userId) existing.user_id = e.userId;
+      } else {
+        sessionMap.set(e.sessionId, {
+          session_id: e.sessionId,
+          project_id: e.projectId,
+          user_id: e.userId || null,
+          anonymous_id: e.anonymousId,
+          min_ts: e.timestamp,
+          max_ts: e.timestamp,
+          event_count: 1,
+          first_event: e.name,
+          last_event: e.name,
+          device_type: e.deviceType || null,
+          os_name: e.osName || null,
+          app_version: e.appVersion || null,
+          environment: e.environment || null,
+        });
+      }
+    }
+
+    // For each session, fetch existing row to merge timestamps
+    for (const session of sessionMap.values()) {
+      const { data: existing } = await this.supabase
+        .from("sessions")
+        .select("start_time, end_time, total_events")
+        .eq("session_id", session.session_id)
+        .single();
+
+      let startTime = session.min_ts;
+      let endTime = session.max_ts;
+      let totalEvents = session.event_count;
+
+      if (existing) {
+        startTime = Math.min(startTime, Number(existing.start_time));
+        endTime = Math.max(endTime, Number(existing.end_time || 0));
+        totalEvents += existing.total_events || 0;
+      }
+
+      const durationMs = endTime > startTime ? endTime - startTime : 0;
+
+      const { error } = await this.supabase.from("sessions").upsert(
+        {
+          session_id: session.session_id,
+          project_id: session.project_id,
+          user_id: session.user_id,
+          anonymous_id: session.anonymous_id,
+          start_time: startTime,
+          end_time: endTime,
+          duration_ms: durationMs,
+          total_events: totalEvents,
+          first_event_name: existing ? undefined : session.first_event,
+          last_event_name: session.last_event,
+          device_type: session.device_type,
+          os_name: session.os_name,
+          app_version: session.app_version,
+          environment: session.environment,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "session_id" },
+      );
+
+      if (error) {
+        console.warn("Failed to upsert session:", session.session_id, error.message);
+      }
+    }
+  }
+
   private async getAverageSessionTimeFallback(
     projectIds?: string[],
     filters?: { startDate?: string; endDate?: string },
@@ -2645,6 +2760,33 @@ export class SupabaseStorage implements StorageAdapter {
         slack_notify_payments: config.slack_notify_payments,
         slack_notify_crashes: config.slack_notify_crashes,
         slack_notify_quota: config.slack_notify_quota,
+      })
+      .eq("id", projectId);
+
+    if (error) throw error;
+  }
+
+  // Superwall Integration
+  async updateProjectSuperwallConfig(
+    projectId: string,
+    config: {
+      superwall_api_key: string | null;
+      superwall_project_id: string | null;
+      superwall_application_id: string | null;
+      superwall_project_name: string | null;
+      superwall_application_name: string | null;
+      superwall_enabled: boolean;
+    },
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .from("projects")
+      .update({
+        superwall_api_key: config.superwall_api_key,
+        superwall_project_id: config.superwall_project_id,
+        superwall_application_id: config.superwall_application_id,
+        superwall_project_name: config.superwall_project_name,
+        superwall_application_name: config.superwall_application_name,
+        superwall_enabled: config.superwall_enabled,
       })
       .eq("id", projectId);
 
